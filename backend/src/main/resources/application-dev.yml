@@ -1,0 +1,56 @@
+# 开发环境配置
+# 所有敏感信息通过环境变量注入，请在 backend/.env 文件中配置（.env 不会被上传到 GitHub）
+# 可从 .env.example 复制并填入你的本地配置
+
+server:
+  ssl:
+    enabled: ${SSL_ENABLED:true}
+    certificate: ${SSL_CERT_PATH:classpath:ssl/chatvibe.icu+3.pem}
+    certificate-private-key: ${SSL_KEY_PATH:classpath:ssl/chatvibe.icu+3-key.pem}
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DB:chatvibe}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:5}
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 0
+          max-wait: -1ms
+  mail:
+    host: smtp.163.com
+    port: 465
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          socketFactory:
+            class: javax.net.ssl.SSLSocketFactory
+            port: 465
+          starttls:
+            enable: true
+
+logging:
+  level:
+    root: info
+    com.chatvibe: debug
+    org.springframework.web: debug
+    com.baomidou.mybatisplus: debug
+
+chatvibe:
+  ai:
+    provider: ${AI_PROVIDER:ollama}

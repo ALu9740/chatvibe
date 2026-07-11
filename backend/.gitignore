@@ -1,0 +1,62 @@
+# === 1. Java 编译产物 ===
+*.class
+*.jar
+*.war
+*.ear
+*.log
+hs_err_pid*
+replay_pid*
+
+# === 2. Maven 构建目录 ===
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# === 3. Gradle 构建目录 ===
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# === 4. IntelliJ IDEA 配置文件 ===
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# === 5. 操作系统生成的文件 ===
+.DS_Store
+Thumbs.db
+
+# === 6. Spring Boot 运行时与日志 ===
+logs/
+
+# === 7. 环境变量文件（包含敏感信息，不上传） ===
+.env
+.env.local
+*.env.local
+!.env.example
+
+# === 8. SSL 证书（不上传，需自行生成） ===
+src/main/resources/ssl/
+*.pem
+*.key
+*.crt
+
+# === 9. 上传的文件 ===
+uploads/
+
+# === 10. 临时文件 ===
+*.tmp
+*.bak
+*.swp
+
+# === 11. 测试 ===
+/src/test/

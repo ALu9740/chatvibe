@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chatvibe.module.chat.mapper.ConversationMapper">
+
+    <resultMap id="ConversationResultMap" type="com.chatvibe.module.chat.entity.Conversation">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="type" property="type"/>
+        <result column="avatar" property="avatar"/>
+        <result column="owner_id" property="ownerId"/>
+        <result column="last_message" property="lastMessage"/>
+        <result column="last_message_at" property="lastMessageAt"/>
+        <result column="last_message_type" property="lastMessageType"/>
+        <result column="member_count" property="memberCount"/>
+        <result column="dissolved" property="dissolved"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <!-- 查询用户参与的会话列表(带未读数和最后消息) -->
+    <!-- 私聊会话(type=1)动态获取对方的昵称、头像和用户ID -->
+    <select id="selectConversationsByUserId" resultType="com.chatvibe.module.chat.vo.ConversationVO">
+        SELECT
+            c.id AS id,
+            CASE
+                WHEN c.type = 1 THEN (
+                    SELECT u.nickname
+                    FROM conversation_member cm2
+                    INNER JOIN user u ON cm2.user_id = u.id
+                    WHERE cm2.conversation_id = c.id
+                      AND cm2.user_id != #{userId}
+                      AND u.deleted = 0
+                    LIMIT 1
+                )
+                ELSE c.name
+            END AS name,
+            c.type AS type,
+            CASE
+                WHEN c.type = 1 THEN (
+                    SELECT u.avatar
+                    FROM conversation_member cm2
+                    INNER JOIN user u ON cm2.user_id = u.id
+                    WHERE cm2.conversation_id = c.id
+                      AND cm2.user_id != #{userId}
+                      AND u.deleted = 0
+                    LIMIT 1
+                )
+                ELSE c.avatar
+            END AS avatar,
+            c.owner_id AS ownerId,
+            c.last_message AS lastMessage,
+            c.last_message_at AS lastMessageAt,
+            c.last_message_type AS lastMessageType,
+            c.member_count AS memberCount,
+            c.dissolved AS dissolved,
+            cm.unread_count AS unreadCount,
+            cm.last_read_at AS lastReadAt,
+            cm.muted AS muted,
+            cm.pinned AS pinned,
+            c.created_at AS createdAt,
+            CASE
+                WHEN c.type = 1 THEN (
+                    SELECT cm2.user_id
+                    FROM conversation_member cm2
+                    WHERE cm2.conversation_id = c.id
+                      AND cm2.user_id != #{userId}
+                    LIMIT 1
+                )
+                ELSE NULL
+            END AS peerId,
+            CASE
+                WHEN c.type = 1 THEN (
+                    SELECT u.status
+                    FROM conversation_member cm2
+                    INNER JOIN user u ON cm2.user_id = u.id
+                    WHERE cm2.conversation_id = c.id
+                      AND cm2.user_id != #{userId}
+                      AND u.deleted = 0
+                    LIMIT 1
+                )
+                ELSE NULL
+            END AS peerStatus,
+            cm.role AS myRole
+        FROM conversation c
+        INNER JOIN conversation_member cm ON c.id = cm.conversation_id
+        WHERE cm.user_id = #{userId}
+          AND c.deleted = 0
+          AND cm.deleted = 0
+        ORDER BY c.last_message_at DESC, c.updated_at DESC
+    </select>
+
+    <!-- 查询私聊会话(两用户之间，要求双方成员均未删除) -->
+    <select id="selectPrivateConversation" resultMap="ConversationResultMap">
+        SELECT c.* FROM conversation c
+        WHERE c.type = 1 AND c.deleted = 0
+        AND c.id IN (
+            SELECT conversation_id FROM conversation_member WHERE user_id = #{userA} AND deleted = 0
+        )
+        AND c.id IN (
+            SELECT conversation_id FROM conversation_member WHERE user_id = #{userB} AND deleted = 0
+        )
+        LIMIT 1
+    </select>
+
+    <!-- 查询私聊会话(两用户之间，忽略成员逻辑删除状态) -->
+    <!-- 用于删除会话后重新创建：找到已存在的会话并恢复成员记录 -->
+    <select id="selectPrivateConversationAnyStatus" resultMap="ConversationResultMap">
+        SELECT c.* FROM conversation c
+        WHERE c.type = 1 AND c.deleted = 0
+        AND c.id IN (
+            SELECT conversation_id FROM conversation_member WHERE user_id = #{userA}
+        )
+        AND c.id IN (
+            SELECT conversation_id FROM conversation_member WHERE user_id = #{userB}
+        )
+        LIMIT 1
+    </select>
+
+    <!-- 查询用户通过 group_member 仍为成员的群聊会话列表(忽略 conversation_member 是否已删除) -->
+    <!-- 用于群组管理弹窗展示"我加入的群组" -->
+    <select id="selectGroupConversationsByGroupMember" resultType="com.chatvibe.module.chat.vo.ConversationVO">
+        SELECT
+            c.id              AS id,
+            c.name            AS name,
+            c.type            AS type,
+            c.avatar          AS avatar,
+            c.owner_id        AS ownerId,
+            c.last_message    AS lastMessage,
+            c.last_message_at AS lastMessageAt,
+            c.last_message_type AS lastMessageType,
+            c.member_count    AS memberCount,
+            c.dissolved       AS dissolved,
+            cm.unread_count   AS unreadCount,
+            cm.last_read_at   AS lastReadAt,
+            cm.muted          AS muted,
+            cm.pinned         AS pinned,
+            c.created_at      AS createdAt,
+            cm.role           AS myRole
+        FROM conversation c
+        INNER JOIN group_member gm ON c.id = gm.conversation_id AND gm.user_id = #{userId} AND gm.deleted = 0
+        LEFT JOIN conversation_member cm ON c.id = cm.conversation_id AND cm.user_id = #{userId} AND cm.deleted = 0
+        WHERE c.type = 2 AND c.deleted = 0 AND c.dissolved = 0
+        ORDER BY c.last_message_at DESC, c.updated_at DESC
+    </select>
+
+</mapper>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chatvibe.module.chat.mapper.MessageMapper">
+
+    <resultMap id="MessageResultMap" type="com.chatvibe.module.chat.entity.Message">
+        <id column="id" property="id"/>
+        <result column="conversation_id" property="conversationId"/>
+        <result column="sender_id" property="senderId"/>
+        <result column="type" property="type"/>
+        <result column="content" property="content"/>
+        <result column="extra" property="extra"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+        <result column="sender_name" property="senderName"/>
+        <result column="sender_avatar" property="senderAvatar"/>
+    </resultMap>
+
+    <!-- 分页查询会话历史消息(倒序, 基于 id 游标分页) -->
+    <!-- 过滤：1)用户加入会话后的消息 2)排除用户已隐藏的消息 -->
+    <!-- JOIN user 表获取发送者昵称和头像，用于群聊展示 -->
+    <select id="selectMessagesPage" resultMap="MessageResultMap">
+        SELECT m.*, u.nickname AS sender_name, u.avatar AS sender_avatar
+        FROM message m
+        INNER JOIN conversation_member cm
+            ON cm.conversation_id = m.conversation_id
+            AND cm.user_id = #{userId}
+            AND cm.deleted = 0
+        LEFT JOIN message_hidden mh
+            ON mh.message_id = m.id
+            AND mh.user_id = #{userId}
+            AND mh.deleted = 0
+        LEFT JOIN user u ON u.id = m.sender_id
+        WHERE m.conversation_id = #{conversationId}
+          AND m.deleted = 0
+          AND mh.id IS NULL
+          AND m.created_at &gt;= cm.created_at
+        <if test="lastId != null">
+            AND m.id &lt; #{lastId}
+        </if>
+        ORDER BY m.id DESC
+        LIMIT #{size}
+    </select>
+
+    <!-- 统计某会话某时间之后的未读消息数 -->
+    <select id="countUnreadAfter" resultType="int">
+        SELECT COUNT(1) FROM message
+        WHERE conversation_id = #{conversationId}
+          AND sender_id != #{userId}
+          AND deleted = 0
+          AND created_at &gt; #{lastReadAt}
+    </select>
+
+</mapper>
