@@ -20,6 +20,7 @@ import com.chatvibe.module.user.mapper.UserMapper;
 import com.chatvibe.module.user.service.UserService;
 import com.chatvibe.security.JwtUtil;
 import com.chatvibe.security.SecurityUtils;
+import com.chatvibe.websocket.dto.WsStatusMessage;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -61,7 +62,7 @@ public class AuthServiceImpl implements AuthService {
     private final JavaMailSender mailSender;
     private final SimpMessagingTemplate messagingTemplate;
 
-    @Value("${spring.mail.username:chatvibe@163.com}")
+    @Value("${spring.mail.username}")
     private String mailFrom;
 
     @Override
@@ -113,28 +114,24 @@ public class AuthServiceImpl implements AuthService {
 
         // 递增登录版本号，使旧设备的 Token 失效（多设备登录冲突处理）
         Integer newVersion = (user.getLoginVersion() == null ? 0 : user.getLoginVersion()) + 1;
-        userMapper.update(null, new LambdaUpdateWrapper<User>()
-                .eq(User::getId, user.getId())
-                .set(User::getLoginVersion, newVersion));
+
         user.setLoginVersion(newVersion);
 
-        // 通过 WebSocket 通知已登录的旧设备强制下线
+        userMapper.update(null, new LambdaUpdateWrapper<User>()
+                .eq(User::getId, user.getId())
+                .set(User::getLoginVersion, newVersion)
+                .set(User::getStatus, UserStatusEnum.ONLINE.getCode()));
+        user.setStatus(UserStatusEnum.ONLINE.getCode());
+
         try {
             messagingTemplate.convertAndSend("/topic/user." + user.getId() + ".force-logout",
-                    Map.of("message", "当前账号已在其他设备登录，您已被强制下线"));
+                    Map.of("message", "当前账号已在其他设备登录，您已被强制下线",
+                            "status", UserStatusEnum.ONLINE.getCode()));
             log.info("[登录] 已发送强制下线通知: userId={}", user.getId());
         } catch (Exception e) {
             log.warn("[登录] 强制下线通知发送失败: userId={}, err={}", user.getId(), e.getMessage());
         }
 
-        // 登录置为在线状态（1）；广播给其他客户端
-        try {
-            userService.updateStatus(user.getId(), 1);
-            // 同步更新内存对象的状态，确保 buildLoginVO 返回正确的在线状态
-            user.setStatus(UserStatusEnum.ONLINE.getCode());
-        } catch (Exception e) {
-            log.warn("[登录] 更新在线状态失败: userId={}, err={}", user.getId(), e.getMessage());
-        }
         return buildLoginVO(user);
     }
 
