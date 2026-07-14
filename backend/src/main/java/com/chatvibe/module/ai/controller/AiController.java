@@ -14,6 +14,7 @@ import com.chatvibe.module.ai.dto.CreateAiConversationDTO;
 import com.chatvibe.module.ai.dto.SendAiMessageDTO;
 import com.chatvibe.module.ai.entity.AiConversation;
 import com.chatvibe.module.ai.mapper.AiConversationMapper;
+import com.chatvibe.module.ai.service.AICiruitBreakerService;
 import com.chatvibe.module.ai.service.AiService;
 import com.chatvibe.module.ai.service.impl.AiFallbackServiceImpl;
 import com.chatvibe.module.ai.vo.AiConversationVO;
@@ -73,6 +74,7 @@ public class AiController {
     private final ConversationMapper conversationMapper;
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AICiruitBreakerService aiCiruitBreakerService;
 
     // ============================================================
     // SSE 流式对话
@@ -104,8 +106,8 @@ public class AiController {
         // 构建上下文消息列表（从会话历史消息中提取，排除当前提问）
         List<Map<String, String>> contextMessages = buildContextFromMessages(chatConvId, userId, dto.getPrompt());
 
-        // 调用主 AI 服务, 失败时回退到兜底服务
-        aiService.chatStream(
+        // 通过熔断器调用 AI 服务，熔断时自动走兜底
+        aiCiruitBreakerService.chatStreamWithCircuitBreaker(
                 dto.getPrompt(),
                 userId,
                 contextMessages,
@@ -122,13 +124,13 @@ public class AiController {
                         emitter.completeWithError(e);
                     }
                 },
-                // onError: 回退到兜底服务
+                // onError: 熔断器会自动降级，这里只需记录日志
                 error -> {
-                    if (Boolean.TRUE.equals(completed.get())) {
-                        return;
+                    log.warn("[AI] 主服务异常（熔断器将处理降级）: {}", error.getMessage());
+                    // 如果熔断器未触发降级（如首次失败），手动走兜底
+                    if (!completed.get()) {
+                        runFallback(dto, userId, chatConvId, emitter, fullResponse, completed);
                     }
-                    log.warn("[AI] 主服务失败，切换兜底: {}", error.getMessage());
-                    runFallback(dto, userId, chatConvId, emitter, fullResponse, completed);
                 },
                 // onComplete
                 () -> {
@@ -136,7 +138,6 @@ public class AiController {
                         try {
                             emitter.send(SseEmitter.event().name("done").data("[DONE]"));
                             emitter.complete();
-                            // 落库 AI 回复 + WebSocket 广播 + 更新会话最后消息
                             saveAndBroadcastAiReply(chatConvId, fullResponse.toString());
                             log.info("[AI] 对话完成: userId={}, convId={}, respLen={}", userId, chatConvId, fullResponse.length());
                         } catch (IOException e) {
