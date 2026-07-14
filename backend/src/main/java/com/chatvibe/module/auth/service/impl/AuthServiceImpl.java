@@ -112,7 +112,6 @@ public class AuthServiceImpl implements AuthService {
         }
         log.info("[登录] 用户登录成功: userId={}, email={}", user.getId(), user.getEmail());
 
-        // 递增登录版本号，使旧设备的 Token 失效（多设备登录冲突处理）
         Integer newVersion = (user.getLoginVersion() == null ? 0 : user.getLoginVersion()) + 1;
 
         user.setLoginVersion(newVersion);

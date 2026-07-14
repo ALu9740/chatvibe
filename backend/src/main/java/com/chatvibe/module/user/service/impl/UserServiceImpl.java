@@ -22,6 +22,9 @@ import com.chatvibe.websocket.dto.WsStatusMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -56,6 +59,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CacheManager cacheManager;
 
     @Value("${chatvibe.upload.url-prefix:/uploads}")
     private String avatarUrlPrefix;
@@ -70,6 +74,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @Cacheable(value = "userInfo", key = "#userId")
     public UserVO getUserInfo(Long userId) {
         User user = getById(userId);
         if (user == null) {
@@ -95,6 +100,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             user.setBio(dto.getBio());
         }
         updateById(user);
+        Cache cache = cacheManager.getCache("userInfo");
+        if (cache != null){
+            cache.evict(userId);
+        }
         return toVO(user);
     }
 
@@ -165,6 +174,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .eq(User::getId, userId)
                 .set(User::getAvatar, url));
         log.info("[用户] 头像上传成功: userId={}, url={}", userId, url);
+        Cache cache = cacheManager.getCache("userInfo");
+        if (cache != null){
+            cache.evict(userId);
+        }
         return url;
     }
 
