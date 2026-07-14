@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.chatvibe.common.result.ResultCode;
 import com.chatvibe.common.exception.BusinessException;
+import com.chatvibe.module.file.service.FileStorageService;
 import com.chatvibe.module.user.dto.ChangeEmailDTO;
 import com.chatvibe.module.user.dto.ChangePasswordDTO;
 import com.chatvibe.module.user.dto.UpdateProfileDTO;
@@ -31,10 +32,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -60,6 +57,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final CacheManager cacheManager;
+
+    private final FileStorageService fileStorageService;
 
     @Value("${chatvibe.upload.url-prefix:/uploads}")
     private String avatarUrlPrefix;
@@ -154,22 +153,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (bytes.length > 2 * 1024 * 1024) {
             throw new BusinessException(ResultCode.PARAM_INVALID, UserAvatarEnum.AVATAR_SIZE_EXCEEDED.getMessage());
         }
-        // 按月份分目录: user_avatar/2026-06/{uuid}.ext
+        // 上传到 MinIO
         String monthDir = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        String subDir = "user_avatar/" + monthDir;
         String uuid = UUID.randomUUID().toString().replace("-", "");
         String savedName = uuid + "." + ext;
-        Path dirPath = Paths.get(avatarBaseDir, "user_avatar", monthDir);
-        Path filePath = dirPath.resolve(savedName);
-        try {
-            Files.createDirectories(dirPath);
-            Files.write(filePath, bytes);
-        } catch (IOException e) {
-            log.error("[用户] 头像写入磁盘失败: userId={}, path={}", userId, filePath, e);
-            throw new BusinessException(ResultCode.FAIL, UserAvatarEnum.AVATAR_UPLOAD_FAILED.getMessage());
-        }
-        // 拼接可访问 URL: /uploads/user_avatar/2026-06/{uuid}.ext
-        String prefix = avatarUrlPrefix.endsWith("/") ? avatarUrlPrefix : avatarUrlPrefix + "/";
-        String url = prefix + "user_avatar/" + monthDir + "/" + savedName;
+        String contentType = "image/" + ext;
+        String url = fileStorageService.upload(bytes, subDir, savedName, contentType);
+
         update(new LambdaUpdateWrapper<User>()
                 .eq(User::getId, userId)
                 .set(User::getAvatar, url));
