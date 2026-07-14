@@ -12,6 +12,8 @@ import com.chatvibe.module.chat.entity.ConversationMember;
 import com.chatvibe.module.chat.entity.Message;
 import com.chatvibe.module.chat.entity.MessageHidden;
 import com.chatvibe.module.chat.enums.*;
+import com.chatvibe.module.chat.event.MessageEvent;
+import com.chatvibe.module.chat.event.MessageEventProducer;
 import com.chatvibe.module.chat.mapper.ConversationMapper;
 import com.chatvibe.module.chat.mapper.ConversationMemberMapper;
 import com.chatvibe.module.chat.mapper.MessageHiddenMapper;
@@ -51,6 +53,7 @@ public class ChatServiceImpl implements ChatService {
     private final GroupMemberMapper groupMemberMapper;
     private final UserService userService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MessageEventProducer messageEventProducer;
 
     @Override
     public List<ConversationVO> getConversationList() {
@@ -123,20 +126,26 @@ public class ChatServiceImpl implements ChatService {
                 .ne(ConversationMember::getUserId, userId)
                 .setSql("unread_count = unread_count + 1"));
 
-        // 填充发送者昵称和头像（用于群聊展示），再通过 WebSocket 推送
+        // 填充发送者昵称和头像（用于群聊展示）
         User sender = userService.getById(userId);
         if (sender != null) {
             message.setSenderName(sender.getNickname());
             message.setSenderAvatar(sender.getAvatar());
         }
 
-        // WebSocket 推送
-        try {
-            messagingTemplate.convertAndSend("/topic/conversation." + dto.getConversationId(), message);
-            log.debug("[WebSocket] 推送消息到会话: {}", dto.getConversationId());
-        } catch (Exception e) {
-            log.warn("[WebSocket] 消息推送失败: {}", e.getMessage());
-        }
+        // 通过 RabbitMQ 异步推送 WebSocket 消息
+        MessageEvent event = new MessageEvent();
+        event.setMessageId(message.getId());
+        event.setConversationId(dto.getConversationId());
+        event.setSenderId(userId);
+        event.setSenderName(message.getSenderName());
+        event.setSenderAvatar(message.getSenderAvatar());
+        event.setType(message.getType());
+        event.setContent(message.getContent());
+        event.setExtra(message.getExtra());
+        event.setStatus(message.getStatus());
+        event.setCreatedAt(System.currentTimeMillis());
+        messageEventProducer.sendPushEvent(event);
 
         return message;
     }

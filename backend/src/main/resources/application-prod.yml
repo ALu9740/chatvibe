@@ -34,6 +34,12 @@ spring:
           max-idle: 8
           min-idle: 2
           max-wait: -1ms
+  rabbitmq:
+    host: ${RABBITMQ_HOST:}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: /
   mail:
     host: smtp.163.com
     port: 465
