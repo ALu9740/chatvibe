@@ -51,7 +51,6 @@ import java.util.stream.Collectors;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
     private static final String CODE_KEY_PREFIX = "code:verify:";
-    private static final String AVATAR_DIR = "uploads/avatars";
 
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate stringRedisTemplate;
@@ -59,12 +58,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private final CacheManager cacheManager;
 
     private final FileStorageService fileStorageService;
-
-    @Value("${chatvibe.upload.url-prefix:/uploads}")
-    private String avatarUrlPrefix;
-
-    @Value("${chatvibe.upload.base-dir:./uploads}")
-    private String avatarBaseDir;
 
     @Override
     public UserVO getCurrentUserInfo() {

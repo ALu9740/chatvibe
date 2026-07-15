@@ -47,7 +47,7 @@ public class SecurityConfig {
             "/api/auth/**",
             "/ws-chat/**",
             "/ws-chat",
-            "/uploads/**",
+            "/minio/**",
             "/doc.html",
             "/swagger-ui/**",
             "/v3/api-docs/**",

@@ -78,6 +78,3 @@ chatvibe:
       url: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
       api-key: ${QWEN_API_KEY}
       model: qwen3.6-max-preview
-  upload:
-    base-dir: /opt/chatvibe/uploads
-    url-prefix: /uploads

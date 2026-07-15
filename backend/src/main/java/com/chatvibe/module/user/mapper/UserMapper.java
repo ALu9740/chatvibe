@@ -17,6 +17,17 @@ import java.util.List;
 public interface UserMapper extends BaseMapper<User> {
 
     /**
+     * 原子递增登录版本号并更新在线状态（避免读改写竞态）
+     * @return 受影响行数
+     */
+    int incrLoginVersionAndSetOnline(@Param("userId") Long userId, @Param("status") Integer status);
+
+    /**
+     * 查询当前登录版本号
+     */
+    Integer selectLoginVersion(@Param("userId") Long userId);
+
+    /**
      * 根据邮箱查询用户
      *
      * @param email 邮箱

@@ -1,6 +1,5 @@
 package com.chatvibe.module.file.controller;
 
-import cn.hutool.core.util.StrUtil;
 import com.chatvibe.common.result.Result;
 import com.chatvibe.common.result.ResultCode;
 import com.chatvibe.common.exception.BusinessException;
@@ -8,18 +7,12 @@ import com.chatvibe.module.file.service.FileStorageService;
 import com.chatvibe.module.file.vo.FileUploadVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.UUID;
 
 /**
  * 文件上传接口

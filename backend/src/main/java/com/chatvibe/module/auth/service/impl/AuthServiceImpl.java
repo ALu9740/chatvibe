@@ -10,6 +10,8 @@ import com.chatvibe.module.auth.dto.LoginDTO;
 import com.chatvibe.module.auth.dto.RegisterDTO;
 import com.chatvibe.module.auth.dto.ResetPasswordDTO;
 import com.chatvibe.module.auth.dto.SendCodeDTO;
+import com.chatvibe.module.auth.event.UserLoginEvent;
+import com.chatvibe.module.auth.event.UserLoginEventProducer;
 import com.chatvibe.module.auth.event.UserRegisterEvent;
 import com.chatvibe.module.auth.event.UserRegisterEventProducer;
 import com.chatvibe.module.auth.service.AuthService;
@@ -23,6 +25,7 @@ import com.chatvibe.module.user.service.UserService;
 import com.chatvibe.security.JwtUtil;
 import com.chatvibe.security.SecurityUtils;
 import com.chatvibe.websocket.dto.WsStatusMessage;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
@@ -56,8 +59,14 @@ public class AuthServiceImpl implements AuthService {
 
     private static final String CODE_KEY_PREFIX = "code:verify:";
     private static final String LIMIT_KEY_PREFIX = "code:verify:limit:";
+    private static final String LOGIN_FAIL_PREFIX = "login:fail:";
+    private static final String LOGIN_LOCK_PREFIX = "login:lock:";
+    private static final int LOGIN_MAX_FAIL = 5;
+    private static final Duration LOGIN_FAIL_TTL = Duration.ofMinutes(15);
+    private static final Duration LOGIN_LOCK_TTL = Duration.ofMinutes(15);
     private static final Duration CODE_TTL = Duration.ofMinutes(5);
     private static final Duration LIMIT_TTL = Duration.ofSeconds(60);
+
 
     private final UserMapper userMapper;
     private final UserService userService;
@@ -66,9 +75,9 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate stringRedisTemplate;
     private final JavaMailSender mailSender;
-    private final SimpMessagingTemplate messagingTemplate;
     private final CacheManager cacheManager;
     private final UserRegisterEventProducer userRegisterEventProducer;
+    private final UserLoginEventProducer userLoginEventProducer;
 
     @Value("${spring.mail.username}")
     private String mailFrom;
@@ -130,32 +139,38 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @RateLimiter(name = "loginRateLimiter", fallbackMethod = "loginRateLimitFallback")
     public LoginVO login(LoginDTO dto) {
-        User user = userService.findByEmail(dto.getEmail());
+        String email = dto.getEmail();
+
+        // 1. 账号锁定检查（Redis 防爆破）
+        if (Boolean.TRUE.equals(stringRedisTemplate.hasKey(LOGIN_LOCK_PREFIX + email))) {
+            throw new BusinessException(ResultCode.ACCOUNT_LOCKED);
+        }
+
+        // 2. 查询用户
+        User user = userService.findByEmail(email);
+
+        // 3. 密码校验；失败则计数/锁定
         if (user == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+            recordLoginFailure(email);
             throw new BusinessException(ResultCode.EMAIL_OR_PASSWORD_ERROR);
         }
-        log.info("[登录] 用户登录成功: userId={}, email={}", user.getId(), user.getEmail());
 
-        Integer newVersion = (user.getLoginVersion() == null ? 0 : user.getLoginVersion()) + 1;
+        // 4. 登录成功，清除失败计数
+        stringRedisTemplate.delete(LOGIN_FAIL_PREFIX + email);
 
+        // 5. 原子递增 loginVersion + 置在线（修复读改写竞态，规避缓存陈旧）
+        userMapper.incrLoginVersionAndSetOnline(user.getId(), UserStatusEnum.ONLINE.getCode());
+        Integer newVersion = userMapper.selectLoginVersion(user.getId());
         user.setLoginVersion(newVersion);
-
-        userMapper.update(null, new LambdaUpdateWrapper<User>()
-                .eq(User::getId, user.getId())
-                .set(User::getLoginVersion, newVersion)
-                .set(User::getStatus, UserStatusEnum.ONLINE.getCode()));
         user.setStatus(UserStatusEnum.ONLINE.getCode());
 
-        try {
-            messagingTemplate.convertAndSend("/topic/user." + user.getId() + ".force-logout",
-                    Map.of("message", "当前账号已在其他设备登录，您已被强制下线",
-                            "status", UserStatusEnum.ONLINE.getCode()));
-            log.info("[登录] 已发送强制下线通知: userId={}", user.getId());
-        } catch (Exception e) {
-            log.warn("[登录] 强制下线通知发送失败: userId={}, err={}", user.getId(), e.getMessage());
-        }
+        // 6. 异步发送强制下线通知（MQ 解耦，不再阻塞登录响应）
+        userLoginEventProducer.sendLoginEvent(
+                new UserLoginEvent(user.getId(), user.getEmail(), newVersion, System.currentTimeMillis()));
 
+        log.info("[登录] 用户登录成功: userId={}, email={}", user.getId(), email);
         return buildLoginVO(user);
     }
 
@@ -306,5 +321,26 @@ public class AuthServiceImpl implements AuthService {
                 </body>
                 </html>
                 """.formatted(code);
+    }
+
+    /**
+     * 记录登录失败次数，超阈值则锁定账号
+     */
+    private void recordLoginFailure(String email) {
+        String failKey = LOGIN_FAIL_PREFIX + email;
+        Long count = stringRedisTemplate.opsForValue().increment(failKey);
+        if (count != null && count == 1) {
+            stringRedisTemplate.expire(failKey, LOGIN_FAIL_TTL);
+        }
+        if (count != null && count >= LOGIN_MAX_FAIL) {
+            stringRedisTemplate.opsForValue().set(LOGIN_LOCK_PREFIX + email, "1", LOGIN_LOCK_TTL);
+            stringRedisTemplate.delete(failKey);
+            log.warn("[登录] 账号多次失败被锁定: email={}, count={}", email, count);
+        }
+    }
+
+    /** 限流降级：直接返回"请求过于频繁" */
+    private LoginVO loginRateLimitFallback(LoginDTO dto, Throwable t) {
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS, "登录请求过于频繁，请稍后再试");
     }
 }

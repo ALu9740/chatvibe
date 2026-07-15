@@ -52,17 +52,20 @@ chatvibe:
       url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
       api-key: ${QWEN_API_KEY:}
       model: ${QWEN_MODEL:qwen3.6-max-preview}
-  upload:
-    base-dir: ${UPLOAD_DIR:./uploads}   # 文件本地存储根目录(头像/聊天文件)
-    url-prefix: /uploads                # 文件访问 URL 前缀
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:}
     secret-key: ${MINIO_SECRET_KEY:}
     bucket: ${MINIO_BUCKET:}
-    url-prefix: ${MINIO_URL_PREFIX:}
+    url-prefix: ${MINIO_URL_PREFIX:/minio}
 
 resilience4j:
+  ratelimiter:
+    instances:
+      loginRateLimiter:
+        limit-for-period: 10          # 每周期最多 10 次
+        limit-refresh-period: 1s      # 1 秒一周期 → 10 QPS
+        timeout-duration: 0           # 超限不等待，直接拒绝
   circuitbreaker:
     instances:
       aiService:
@@ -83,3 +86,13 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
+      loginService: # 新增：登录通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+

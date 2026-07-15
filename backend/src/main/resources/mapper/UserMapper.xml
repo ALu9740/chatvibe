@@ -17,6 +17,16 @@
         <result column="deleted" property="deleted"/>
     </resultMap>
 
+    <update id="incrLoginVersionAndSetOnline">
+        UPDATE `user`
+        SET login_version = IFNULL(login_version, 0) + 1, status = #{status}
+        WHERE id = #{userId} AND deleted = 0
+    </update>
+
+    <select id="selectLoginVersion" resultType="java.lang.Integer">
+        SELECT login_version FROM `user` WHERE id = #{userId} AND deleted = 0
+    </select>
+
     <!-- 根据邮箱查询用户 -->
     <select id="findByEmail" resultMap="UserResultMap">
         SELECT * FROM `user`

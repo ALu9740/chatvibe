@@ -39,6 +39,7 @@ public enum ResultCode {
     OLD_PASSWORD_ERROR(2010, "旧密码不正确"),
     ACCOUNT_LOGIN_ELSEWHERE(2011, "当前账号已在其他设备登录，您已被强制下线"),
     EMAIL_NOT_FOUND(2012, "邮箱未注册"),
+    ACCOUNT_LOCKED(2013, "账号已被锁定，请15分钟后再试"),
 
     /* 用户模块 3xxx */
     USER_NOT_FOUND(3001, "用户不存在"),
