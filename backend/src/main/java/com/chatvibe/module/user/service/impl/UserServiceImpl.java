@@ -20,9 +20,11 @@ import com.chatvibe.module.user.vo.NotificationPreferencesVO;
 import com.chatvibe.module.user.vo.UserVO;
 import com.chatvibe.security.SecurityUtils;
 import com.chatvibe.websocket.dto.WsStatusMessage;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
@@ -32,6 +34,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
@@ -52,6 +55,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     private static final String CODE_KEY_PREFIX = "code:verify:";
 
+    // 用户状态 Redis Key 前缀
+    private static final String USER_STATUS_KEY_PREFIX = "user:status:";
+    private static final Duration STATUS_TTL = Duration.ofMinutes(10);
+
+    // 自注入代理，解决 @Cacheable 自调用失效问题
+    @Lazy
+    @Autowired
+    private UserService self;
+
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
@@ -60,20 +72,46 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private final FileStorageService fileStorageService;
 
     @Override
+    public Integer getUserStatus(Long userId) {
+        // 1. 先查 Redis
+        String statusStr = stringRedisTemplate
+                .opsForValue()
+                .get(USER_STATUS_KEY_PREFIX + userId);
+        if (statusStr != null) {
+            return Integer.parseInt(statusStr);
+        }
+        // 2. Redis 未命中，查 DB 并回写
+        User user = getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.USER_NOT_FOUND);
+        }
+        Integer status = user.getStatus() != null ? user.getStatus() : UserStatusEnum.OFFLINE.getCode();
+        stringRedisTemplate
+                .opsForValue()
+                .set(USER_STATUS_KEY_PREFIX + userId, status.toString(), STATUS_TTL);
+        return status;
+    }
+
+    @Override
     public UserVO getCurrentUserInfo() {
         Long userId = SecurityUtils.getCurrentUserId();
-        return getUserInfo(userId);
+        return self.getUserInfo(userId);
     }
 
     @Override
     @Cacheable(value = "userInfo", key = "#userId")
+    @RateLimiter(name = "userInfoRateLimiter", fallbackMethod = "getUserInfoRateLimitFallback")
     public UserVO getUserInfo(Long userId) {
         User user = getById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-        return toVO(user);
+        UserVO vo = toVO(user);
+        vo.setStatus(null);
+        return vo;
     }
+
+
 
     @Override
     public UserVO updateProfile(UpdateProfileDTO dto) {
@@ -186,23 +224,30 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public void updateStatus(Long userId, Integer status) {
-        // 校验状态码有效性（统一在业务层处理）
         if (!UserStatusEnum.isValid(status)) {
-            throw new BusinessException(ResultCode.PARAM_INVALID,
-                    "状态值无效");
+            throw new BusinessException(ResultCode.PARAM_INVALID, "状态值无效");
         }
-        // 校验用户是否存在
         User user = getById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-        // 无变化则跳过更新与广播，避免冗余推送
         if (status.equals(user.getStatus())) {
             return;
         }
+        // 1. 更新 DB
         update(new LambdaUpdateWrapper<User>()
                 .eq(User::getId, userId)
                 .set(User::getStatus, status));
+        // 2. 同步写 Redis（实时状态）
+        stringRedisTemplate
+                .opsForValue()
+                .set(USER_STATUS_KEY_PREFIX + userId, status.toString(), STATUS_TTL);
+        // 3. 清除 Caffeine 缓存
+        Cache cache = cacheManager.getCache("userInfo");
+        if (cache != null) {
+            cache.evict(userId);
+        }
+        // 4. 广播状态变更
         broadcastStatus(userId, status);
     }
 
@@ -291,5 +336,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return defaultVal;
         }
         return val == 1;
+    }
+
+    /** 限流降级：请求过于频繁时直接拒绝 */
+    private UserVO getUserInfoRateLimitFallback(Long userId, Throwable t) {
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
     }
 }

@@ -19,6 +19,14 @@ import java.util.List;
 public interface UserService extends IService<User> {
 
     /**
+     * 获取用户在线状态
+     *
+     * @param userId 用户ID
+     * @return 在线状态值：0-离线 1-在线 2-忙碌 3-离开
+     */
+    Integer getUserStatus(Long userId);
+
+    /**
      * 获取当前登录用户资料
      *
      * @return 用户资料

@@ -70,6 +70,10 @@ resilience4j:
         limit-for-period: 5
         limit-refresh-period: 1m
         timeout-duration: 0
+      userInfoRateLimiter: # 新增：用户信息查询限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService:
@@ -99,4 +103,5 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
+
 

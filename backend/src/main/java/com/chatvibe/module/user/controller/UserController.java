@@ -32,7 +32,9 @@ public class UserController {
      */
     @GetMapping("/me")
     public Result<UserVO> getCurrentUser() {
-        return Result.success(userService.getCurrentUserInfo());
+        UserVO vo = userService.getCurrentUserInfo();
+        vo.setStatus(userService.getUserStatus(vo.getId()));
+        return Result.success(vo);
     }
 
     /**
@@ -40,8 +42,11 @@ public class UserController {
      */
     @GetMapping("/{userId}")
     public Result<UserVO> getUserInfo(@PathVariable Long userId) {
-        return Result.success(userService.getUserInfo(userId));
+        UserVO vo = userService.getUserInfo(userId);
+        vo.setStatus(userService.getUserStatus(userId));
+        return Result.success(vo);
     }
+
 
     /**
      * 更新当前用户资料

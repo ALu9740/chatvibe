@@ -373,12 +373,12 @@ public class AuthServiceImpl implements AuthService {
 
     /** 限流降级：直接返回"请求过于频繁" */
     private LoginVO loginRateLimitFallback(LoginDTO dto, Throwable t) {
-        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS, "登录请求过于频繁，请稍后再试");
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
     }
 
 
     /** 限流降级 */
     private void resetPasswordRateLimitFallback(ResetPasswordDTO dto, Throwable t) {
-        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS, "重置密码请求过于频繁，请稍后再试");
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
     }
 }
