@@ -29,7 +29,7 @@ public class CacheConfig {
                 .expireAfterWrite(5, TimeUnit.MINUTES)
                 .maximumSize(500)
                 .recordStats());
-        cacheManager.setCacheNames(java.util.List.of("userInfo", "userEmail"));
+        cacheManager.setCacheNames(java.util.List.of("userInfo", "userEmail","emailExists"));
         return cacheManager;
     }
 

@@ -1,15 +1,21 @@
 package com.chatvibe.module.auth.controller;
 
+import com.chatvibe.common.exception.BusinessException;
 import com.chatvibe.common.result.Result;
+import com.chatvibe.common.result.ResultCode;
 import com.chatvibe.module.auth.dto.LoginDTO;
 import com.chatvibe.module.auth.dto.RegisterDTO;
 import com.chatvibe.module.auth.dto.ResetPasswordDTO;
 import com.chatvibe.module.auth.dto.SendCodeDTO;
 import com.chatvibe.module.auth.service.AuthService;
 import com.chatvibe.module.auth.vo.LoginVO;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
 
 /**
  * 认证接口
@@ -22,13 +28,29 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final String REGISTER_LIMIT_PREFIX = "limit:register:";
+    private static final Duration REGISTER_LIMIT_TTL = Duration.ofHours(1);
+    private static final int REGISTER_MAX_COUNT = 5;
+
     private final AuthService authService;
+    private final StringRedisTemplate stringRedisTemplate;
 
     /**
      * 用户注册
      */
     @PostMapping("/register")
-    public Result<LoginVO> register(@Valid @RequestBody RegisterDTO dto) {
+    public Result<LoginVO> register(@Valid @RequestBody RegisterDTO dto, HttpServletRequest request) {
+        // IP 限流
+        String ip = getClientIp(request);
+        String limitKey = REGISTER_LIMIT_PREFIX + ip;
+        Long count = stringRedisTemplate.opsForValue().increment(limitKey);
+        if (count != null && count == 1) {
+            stringRedisTemplate.expire(limitKey, REGISTER_LIMIT_TTL);
+        }
+        if (count != null && count > REGISTER_MAX_COUNT) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+
         return Result.success(authService.register(dto));
     }
 
@@ -83,5 +105,20 @@ public class AuthController {
         // 去除 Bearer 前缀
         String token = refreshToken.startsWith("Bearer ") ? refreshToken.substring(7) : refreshToken;
         return Result.success(authService.refresh(token));
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        // 多层代理取第一个
+        if (ip != null && ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        return ip;
     }
 }

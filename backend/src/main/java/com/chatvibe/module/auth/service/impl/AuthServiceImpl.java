@@ -10,6 +10,8 @@ import com.chatvibe.module.auth.dto.LoginDTO;
 import com.chatvibe.module.auth.dto.RegisterDTO;
 import com.chatvibe.module.auth.dto.ResetPasswordDTO;
 import com.chatvibe.module.auth.dto.SendCodeDTO;
+import com.chatvibe.module.auth.event.UserRegisterEvent;
+import com.chatvibe.module.auth.event.UserRegisterEventProducer;
 import com.chatvibe.module.auth.service.AuthService;
 import com.chatvibe.module.auth.vo.LoginVO;
 import com.chatvibe.module.chat.service.ChatService;
@@ -26,6 +28,8 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -33,6 +37,8 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.Map;
@@ -61,6 +67,8 @@ public class AuthServiceImpl implements AuthService {
     private final StringRedisTemplate stringRedisTemplate;
     private final JavaMailSender mailSender;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CacheManager cacheManager;
+    private final UserRegisterEventProducer userRegisterEventProducer;
 
     @Value("${spring.mail.username}")
     private String mailFrom;
@@ -72,13 +80,25 @@ public class AuthServiceImpl implements AuthService {
         if (!verifyCode(dto.getEmail(), dto.getCode())) {
             throw new BusinessException(ResultCode.CODE_NOT_MATCH);
         }
-        // 校验邮箱是否已存在
-        Long existCount = userMapper.selectCount(new LambdaQueryWrapper<User>()
-                .eq(User::getEmail, dto.getEmail()));
-        if (existCount > 0) {
-            throw new BusinessException(ResultCode.EMAIL_EXISTS);
+        // 校验邮箱是否已存在(从缓存中获取)
+        Cache emailCache = cacheManager.getCache("emailExists");
+        if(emailCache != null){
+            Boolean cacheExist = emailCache.get(dto.getEmail(), Boolean.class);
+            if(Boolean.TRUE.equals(cacheExist)){
+                throw new BusinessException(ResultCode.EMAIL_EXISTS);
+            }
         }
 
+        // 缓存未命中，再查DB
+        Long existCount = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getEmail, dto.getEmail()));
+        if (existCount > 0){
+            // 写入缓存，5 分钟内同一邮箱再次注册直接命中
+            if (emailCache != null){
+                emailCache.put(dto.getEmail(),true);
+            }
+            throw new BusinessException(ResultCode.EMAIL_EXISTS);
+        }
         // 创建用户
         User user = new User();
         user.setEmail(dto.getEmail());
@@ -90,12 +110,17 @@ public class AuthServiceImpl implements AuthService {
         userMapper.insert(user);
         log.info("[注册] 新用户注册成功: userId={}, email={}", user.getId(), user.getEmail());
 
-        // 创建默认 AI 会话
-        try {
-            chatService.createAiConversation(user.getId());
-        } catch (Exception e) {
-            log.warn("[注册] 创建默认AI会话失败: {}", e.getMessage());
-        }
+        // 异步创建AI会话
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        userRegisterEventProducer.sendRegisterEvent(
+                                new UserRegisterEvent(user.getId(), user.getEmail(), user.getNickname())
+                        );
+                    }
+                }
+        );
 
         // 删除已使用的验证码
         stringRedisTemplate.delete(CODE_KEY_PREFIX + dto.getEmail());

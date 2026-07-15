@@ -15,9 +15,28 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class RabbitMQConfig {
+    // 注册事件相关常量
+    public static final String USER_REGISTER_QUEUE = "user.register.event";
+    public static final String USER_REGISTER_ROUTING_KEY = "user.register.#";
+
+    // 聊天消息相关常量
     public static final String CHAT_EXCHANGE = "chat.exchange";
     public static final String CHAT_MESSAGE_QUEUE = "chat.message.push";
     public static final String CHAT_MESSAGE_ROUTING_KEY = "chat.message.#";
+
+    /** 注册事件队列 */
+    @Bean
+    public Queue userRegisterQueue() {
+        return QueueBuilder.durable(USER_REGISTER_QUEUE).build();
+    }
+
+    /** 绑定到已有的 chatExchange（复用交换机） */
+    @Bean
+    public Binding userRegisterBinding() {
+        return BindingBuilder.bind(userRegisterQueue())
+                .to(chatExchange())
+                .with(USER_REGISTER_ROUTING_KEY);
+    }
 
     /** Topic 交换机 */
     @Bean

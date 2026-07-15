@@ -12,7 +12,7 @@ spring:
       max-request-size: 10MB
   cache:
     type: caffeine
-    cache-names:  userInfo,userEmail
+    cache-names:  userInfo,userEmail,emailExists
 
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
@@ -72,5 +72,14 @@ resilience4j:
         failure-rate-threshold: 50           # 失败率阈值50%触发熔断
         wait-duration-in-open-state: 30s     # 熔断开启后等待30秒尝试半开
         permitted-number-of-calls-in-half-open-state: 3  # 半开状态允许3次试探
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+      registerService: # 新增：注册流程熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
