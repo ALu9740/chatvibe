@@ -10,10 +10,7 @@ import com.chatvibe.module.auth.dto.LoginDTO;
 import com.chatvibe.module.auth.dto.RegisterDTO;
 import com.chatvibe.module.auth.dto.ResetPasswordDTO;
 import com.chatvibe.module.auth.dto.SendCodeDTO;
-import com.chatvibe.module.auth.event.UserLoginEvent;
-import com.chatvibe.module.auth.event.UserLoginEventProducer;
-import com.chatvibe.module.auth.event.UserRegisterEvent;
-import com.chatvibe.module.auth.event.UserRegisterEventProducer;
+import com.chatvibe.module.auth.event.*;
 import com.chatvibe.module.auth.service.AuthService;
 import com.chatvibe.module.auth.vo.LoginVO;
 import com.chatvibe.module.chat.service.ChatService;
@@ -24,7 +21,6 @@ import com.chatvibe.module.user.mapper.UserMapper;
 import com.chatvibe.module.user.service.UserService;
 import com.chatvibe.security.JwtUtil;
 import com.chatvibe.security.SecurityUtils;
-import com.chatvibe.websocket.dto.WsStatusMessage;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -36,7 +32,6 @@ import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +39,6 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
-import java.util.Map;
 
 /**
  * 认证服务实现
@@ -78,6 +72,8 @@ public class AuthServiceImpl implements AuthService {
     private final CacheManager cacheManager;
     private final UserRegisterEventProducer userRegisterEventProducer;
     private final UserLoginEventProducer userLoginEventProducer;
+    private final UserPasswordResetEventProducer userPasswordResetEventProducer;
+    private final UserLogoutEventProducer userLogoutEventProducer;
 
     @Value("${spring.mail.username}")
     private String mailFrom;
@@ -206,38 +202,74 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @RateLimiter(name = "resetPasswordRateLimiter", fallbackMethod = "resetPasswordRateLimitFallback")
     @Transactional(rollbackFor = Exception.class)
     public void resetPassword(ResetPasswordDTO dto) {
-        // 校验验证码
+        // 1. 校验验证码
         if (!verifyCode(dto.getEmail(), dto.getCode())) {
             throw new BusinessException(ResultCode.CODE_NOT_MATCH);
         }
-        // 校验邮箱存在
+        // 2. 校验邮箱存在
         User user = userService.findByEmail(dto.getEmail());
         if (user == null) {
             throw new BusinessException(ResultCode.EMAIL_NOT_FOUND);
         }
 
-        // 更新密码
-        user.setPassword(passwordEncoder.encode(dto.getPassword()));
-        userMapper.updateById(user);
-        // 删除已使用的验证码（防重放）
+        // 3. 更新密码
+        userMapper.update(new LambdaUpdateWrapper<User>()
+                .eq(User::getId, user.getId())
+                .set(User::getPassword, passwordEncoder.encode(dto.getPassword())));
+
+        // 4. 递增 loginVersion + 置离线 -> 使旧 Token 立即失效
+        userMapper.incrLoginVersionAndSetOnline(user.getId(), UserStatusEnum.OFFLINE.getCode());
+
+        // 5. 清除 Caffeine 用户信息缓存
+        Cache userInfoCache = cacheManager.getCache("userInfo");
+        if (userInfoCache != null) {
+            userInfoCache.evict(user.getId());
+        }
+
+        // 6. 删除已使用的验证码
         stringRedisTemplate.delete(CODE_KEY_PREFIX + dto.getEmail());
+
+        // 7. 事务提交后异步发送"密码已重置"通知邮件（MQ 解耦，不阻塞响应）
+        final Long userId = user.getId();
+        final String email = user.getEmail();
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        userPasswordResetEventProducer.sendPasswordResetEvent(
+                                new UserPasswordResetEvent(userId, email, System.currentTimeMillis()));
+                    }
+                }
+        );
+
         log.info("[重置密码] 用户密码已重置: userId={}, email={}", user.getId(), user.getEmail());
     }
 
     @Override
     public void logout() {
-        // JWT 无状态，登出由前端清除 Token 即可
-        try {
-            Long userId = SecurityUtils.getCurrentUserId();
-            if (userId != null) {
-                userService.updateStatus(userId, UserStatusEnum.OFFLINE.getCode());
-            }
-        } catch (Exception e) {
-            log.warn("[登出] 更新离线状态失败: err={}", e.getMessage());
+        Long userId = SecurityUtils.getCurrentUserId();
+        if (userId == null) {
+            log.warn("[登出] 无法获取当前用户ID");
+            return;
         }
-        log.info("[登出] 用户登出成功");
+
+        // 1. 递增 loginVersion + 置离线 -> 使旧 Token 真正失效
+        userMapper.incrLoginVersionAndSetOnline(userId, UserStatusEnum.OFFLINE.getCode());
+
+        // 2. 清除 Caffeine 用户信息缓存
+        Cache userInfoCache = cacheManager.getCache("userInfo");
+        if (userInfoCache != null) {
+            userInfoCache.evict(userId);
+        }
+
+        // 3. 通过 MQ 异步广播离线状态（不阻塞登出响应）
+        userLogoutEventProducer.sendLogoutEvent(
+                new UserLogoutEvent(userId, System.currentTimeMillis()));
+
+        log.info("[登出] 用户登出成功: userId={}", userId);
     }
 
     @Override
@@ -342,5 +374,11 @@ public class AuthServiceImpl implements AuthService {
     /** 限流降级：直接返回"请求过于频繁" */
     private LoginVO loginRateLimitFallback(LoginDTO dto, Throwable t) {
         throw new BusinessException(ResultCode.TOO_MANY_REQUESTS, "登录请求过于频繁，请稍后再试");
+    }
+
+
+    /** 限流降级 */
+    private void resetPasswordRateLimitFallback(ResetPasswordDTO dto, Throwable t) {
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS, "重置密码请求过于频繁，请稍后再试");
     }
 }

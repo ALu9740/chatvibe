@@ -18,6 +18,9 @@ public interface UserMapper extends BaseMapper<User> {
 
     /**
      * 原子递增登录版本号并更新在线状态（避免读改写竞态）
+     *
+     * @param userId 用户ID
+     * @param status 在线状态
      * @return 受影响行数
      */
     int incrLoginVersionAndSetOnline(@Param("userId") Long userId, @Param("status") Integer status);

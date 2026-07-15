@@ -15,6 +15,14 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class RabbitMQConfig {
+    // 登出事件
+    public static final String USER_LOGOUT_QUEUE = "user.logout.event";
+    public static final String USER_LOGOUT_ROUTING_KEY = "user.logout.#";
+
+    // 密码重置事件
+    public static final String USER_PASSWORD_RESET_QUEUE = "user.password.reset.event";
+    public static final String USER_PASSWORD_RESET_ROUTING_KEY = "user.password.reset.#";
+
     // 登录事件相关常量
     public static final String USER_LOGIN_QUEUE = "user.login.event";
     public static final String USER_LOGIN_ROUTING_KEY = "user.login.#";
@@ -27,6 +35,32 @@ public class RabbitMQConfig {
     public static final String CHAT_EXCHANGE = "chat.exchange";
     public static final String CHAT_MESSAGE_QUEUE = "chat.message.push";
     public static final String CHAT_MESSAGE_ROUTING_KEY = "chat.message.#";
+
+    /** 登出事件队列 */
+    @Bean
+    public Queue userLogoutQueue() {
+        return QueueBuilder.durable(USER_LOGOUT_QUEUE).build();
+    }
+
+    @Bean
+    public Binding userLogoutBinding() {
+        return BindingBuilder.bind(userLogoutQueue())
+                .to(chatExchange())
+                .with(USER_LOGOUT_ROUTING_KEY);
+    }
+
+    /** 密码重置事件队列 */
+    @Bean
+    public Queue userPasswordResetQueue() {
+        return QueueBuilder.durable(USER_PASSWORD_RESET_QUEUE).build();
+    }
+
+    @Bean
+    public Binding userPasswordResetBinding() {
+        return BindingBuilder.bind(userPasswordResetQueue())
+                .to(chatExchange())
+                .with(USER_PASSWORD_RESET_ROUTING_KEY);
+    }
 
     /** 注册事件队列 */
     @Bean

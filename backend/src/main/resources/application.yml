@@ -66,6 +66,10 @@ resilience4j:
         limit-for-period: 10          # 每周期最多 10 次
         limit-refresh-period: 1s      # 1 秒一周期 → 10 QPS
         timeout-duration: 0           # 超限不等待，直接拒绝
+      resetPasswordRateLimiter: # 新增：重置密码限流
+        limit-for-period: 5
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService:
