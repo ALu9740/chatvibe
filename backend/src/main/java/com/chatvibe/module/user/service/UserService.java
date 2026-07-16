@@ -19,6 +19,14 @@ import java.util.List;
 public interface UserService extends IService<User> {
 
     /**
+     * 获取指定用户的通知偏好（供内部调用，不依赖 SecurityContext）
+     *
+     * @param userId 用户ID
+     * @return 通知偏好VO
+     */
+    NotificationPreferencesVO getNotificationPreferences(Long userId);
+
+    /**
      * 获取用户在线状态
      *
      * @param userId 用户ID

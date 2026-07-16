@@ -9,6 +9,8 @@ import com.chatvibe.module.notification.enums.NotificationTypeEnum;
 import com.chatvibe.module.notification.mapper.NotificationMapper;
 import com.chatvibe.module.notification.service.NotificationService;
 import com.chatvibe.module.notification.vo.NotificationVO;
+import com.chatvibe.module.user.service.UserService;
+import com.chatvibe.module.user.vo.NotificationPreferencesVO;
 import com.chatvibe.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,8 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationMapper notificationMapper;
     private final SimpMessagingTemplate messagingTemplate;
 
+    private final UserService userService;
+
     @Override
     public void createNotification(Long userId, NotificationTypeEnum type, String title, String content, String extra) {
         Notification notification = new Notification();
@@ -42,7 +46,24 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setExtra(extra);
         notification.setIsRead(0);
         notificationMapper.insert(notification);
+
+        NotificationPreferencesVO prefs = userService.getNotificationPreferences(userId);
+
+        if (isAiNotification(type) && !prefs.getAiAlert()) {
+            log.info("[通知] 用户已关闭AI提醒，跳过推送: userId={}, type={}", userId, type);
+            return;
+        }
+
+        if (!prefs.getDesktop()) {
+            log.info("[通知] 用户已关闭桌面通知，跳过推送: userId={}, type={}", userId, type);
+            return;
+        }
+
         NotificationVO vo = toVO(notification);
+
+        String extraWithSound = appendSoundFlag(extra, prefs.getSound());
+        vo.setExtra(extraWithSound);
+
         try {
             messagingTemplate.convertAndSend("/topic/user." + userId + ".notification", vo);
         } catch (Exception e) {
@@ -120,5 +141,27 @@ public class NotificationServiceImpl implements NotificationService {
         vo.setIsRead(notification.getIsRead());
         vo.setCreatedAt(notification.getCreatedAt());
         return vo;
+    }
+
+    /**
+     * 判断是否为 AI 相关通知
+     */
+    private boolean isAiNotification(NotificationTypeEnum type) {
+        // TODO:目前没有 AI 通知类型，预留扩展
+        return false;
+    }
+
+    /**
+     * 在 extra JSON 中追加声音标记
+     */
+    private String appendSoundFlag(String extra, Boolean soundEnabled) {
+        boolean sound = soundEnabled != null && soundEnabled;
+        if (extra == null || extra.isBlank()) {
+            return "{\"silent\":" + !sound + "}";
+        }
+        if (extra.startsWith("{") && extra.endsWith("}")) {
+            return extra.substring(0, extra.length() - 1) + ",\"silent\":" + !sound + "}";
+        }
+        return extra;
     }
 }

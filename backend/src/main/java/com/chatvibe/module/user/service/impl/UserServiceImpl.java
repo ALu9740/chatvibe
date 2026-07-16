@@ -113,6 +113,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
 
 
+
     @Override
     public UserVO updateProfile(UpdateProfileDTO dto) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -130,14 +131,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             user.setBio(dto.getBio());
         }
         updateById(user);
-        Cache cache = cacheManager.getCache("userInfo");
-        if (cache != null){
-            cache.evict(userId);
-        }
+        evictUserInfoCache(userId);
         return toVO(user);
     }
 
     @Override
+    @RateLimiter(name = "changePasswordRateLimiter", fallbackMethod = "changePasswordRateLimitFallback")
+    @Transactional(rollbackFor = Exception.class)
     public void changePassword(ChangePasswordDTO dto) {
         Long userId = SecurityUtils.getCurrentUserId();
         User user = getById(userId);
@@ -147,12 +147,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (!passwordEncoder.matches(dto.getOldPassword(), user.getPassword())) {
             throw new BusinessException(ResultCode.OLD_PASSWORD_ERROR);
         }
-        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
-        updateById(user);
+        // 只更新 password 字段
+        update(new LambdaUpdateWrapper<User>()
+                .eq(User::getId, userId)
+                .set(User::getPassword, passwordEncoder.encode(dto.getNewPassword())));
+        // 递增 loginVersion + 置离线 → 使所有旧 Token 立即失效
+        baseMapper.incrLoginVersionAndSetOnline(userId, UserStatusEnum.OFFLINE.getCode());
+        // 同步更新 Redis 状态
+        stringRedisTemplate.opsForValue()
+                .set(USER_STATUS_KEY_PREFIX + userId, "0", STATUS_TTL);
+        // 清除 Caffeine 缓存
+        evictUserInfoCache(userId);
         log.info("[用户] 修改密码成功, userId={}", userId);
     }
 
     @Override
+    @RateLimiter(name = "uploadAvatarRateLimiter", fallbackMethod = "uploadAvatarRateLimitFallback")
     @Transactional(rollbackFor = Exception.class)
     public String uploadAvatar(String base64) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -196,10 +206,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .eq(User::getId, userId)
                 .set(User::getAvatar, url));
         log.info("[用户] 头像上传成功: userId={}, url={}", userId, url);
-        Cache cache = cacheManager.getCache("userInfo");
-        if (cache != null){
-            cache.evict(userId);
-        }
+        evictUserInfoCache(userId);
         return url;
     }
 
@@ -243,10 +250,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .opsForValue()
                 .set(USER_STATUS_KEY_PREFIX + userId, status.toString(), STATUS_TTL);
         // 3. 清除 Caffeine 缓存
-        Cache cache = cacheManager.getCache("userInfo");
-        if (cache != null) {
-            cache.evict(userId);
-        }
+        evictUserInfoCache(userId);
         // 4. 广播状态变更
         broadcastStatus(userId, status);
     }
@@ -265,6 +269,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    @RateLimiter(name = "changeEmailRateLimiter", fallbackMethod = "changeEmailRateLimitFallback")
     @Transactional(rollbackFor = Exception.class)
     public void changeEmail(ChangeEmailDTO dto) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -289,15 +294,19 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .set(User::getEmail, newEmail));
         // 删除已用验证码（防重放）
         stringRedisTemplate.delete(CODE_KEY_PREFIX + newEmail);
-        // 邮箱是 JWT 身份凭证的一部分，更换后旧 Token 立即失效（JWT 过滤器会拒绝）。
-        // 因此无需走登出接口，直接在此处置为离线并广播，避免状态残留和登出接口报错。
+        // 清除 emailExists 缓存（旧邮箱的缓存标记需要清除）
+        Cache emailCache = cacheManager.getCache("emailExists");
+        if (emailCache != null) {
+            emailCache.evict(dto.getNewEmail());
+        }
+        // 邮箱是 JWT 身份凭证的一部分，更换后旧 Token 立即失效
         updateStatus(userId, 0);
         log.info("[用户] 更换邮箱成功: userId={}, newEmail={}", userId, newEmail);
     }
 
     @Override
-    public NotificationPreferencesVO getNotificationPreferences() {
-        Long userId = SecurityUtils.getCurrentUserId();
+    @Cacheable(value = "userNotifyPrefs", key = "#userId")
+    public NotificationPreferencesVO getNotificationPreferences(Long userId) {
         User user = getById(userId);
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
@@ -310,21 +319,41 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    public NotificationPreferencesVO getNotificationPreferences() {
+        Long userId = SecurityUtils.getCurrentUserId();
+        return self.getNotificationPreferences(userId);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateNotificationPreferences(NotificationPreferencesVO vo) {
         Long userId = SecurityUtils.getCurrentUserId();
         LambdaUpdateWrapper<User> wrapper = new LambdaUpdateWrapper<User>()
                 .eq(User::getId, userId);
+        boolean hasUpdate = false;
         if (vo.getDesktop() != null) {
             wrapper.set(User::getNotifyDesktop, vo.getDesktop() ? 1 : 0);
+            hasUpdate = true;
         }
         if (vo.getSound() != null) {
             wrapper.set(User::getNotifySound, vo.getSound() ? 1 : 0);
+            hasUpdate = true;
         }
         if (vo.getAiAlert() != null) {
             wrapper.set(User::getNotifyAiAlert, vo.getAiAlert() ? 1 : 0);
+            hasUpdate = true;
+        }
+        if (!hasUpdate) {
+            return;
         }
         update(wrapper);
+        // 清除通知偏好缓存
+        Cache notifyCache = cacheManager.getCache("userNotifyPrefs");
+        if (notifyCache != null) {
+            notifyCache.evict(userId);
+        }
+        // 同步清除 userInfo 缓存
+        evictUserInfoCache(userId);
         log.info("[用户] 通知偏好已更新: userId={}", userId);
     }
 
@@ -338,8 +367,33 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         return val == 1;
     }
 
-    /** 限流降级：请求过于频繁时直接拒绝 */
+    /**
+     * 清除用户信息 Caffeine 缓存
+     */
+    private void evictUserInfoCache(Long userId) {
+        Cache cache = cacheManager.getCache("userInfo");
+        if (cache != null) {
+            cache.evict(userId);
+        }
+    }
+
+    /** 限流降级：用户信息查询限流 */
     private UserVO getUserInfoRateLimitFallback(Long userId, Throwable t) {
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+    }
+
+    /** 限流降级：修改密码限流 */
+    private void changePasswordRateLimitFallback(ChangePasswordDTO dto, Throwable t) {
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+    }
+
+    /** 限流降级：上传头像限流 */
+    private String uploadAvatarRateLimitFallback(String base64, Throwable t) {
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+    }
+
+    /** 限流降级：更换邮箱限流 */
+    private void changeEmailRateLimitFallback(ChangeEmailDTO dto, Throwable t) {
         throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
     }
 }

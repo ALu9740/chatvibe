@@ -7,6 +7,7 @@ import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -29,7 +30,7 @@ public class CacheConfig {
                 .expireAfterWrite(5, TimeUnit.MINUTES)
                 .maximumSize(500)
                 .recordStats());
-        cacheManager.setCacheNames(java.util.List.of("userInfo", "userEmail","emailExists"));
+        cacheManager.setCacheNames(List.of("userInfo", "userEmail","emailExists","userNotifyPrefs"));
         return cacheManager;
     }
 
