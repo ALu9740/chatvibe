@@ -1,11 +1,5 @@
 import request from '@/utils/request'
 import type { Friend, FriendRequest, FriendRequestStatus } from '@/types'
-import {
-  USE_MOCK,
-  MOCK_FRIENDS,
-  MOCK_PENDING_REQUESTS,
-  MOCK_SENT_REQUESTS
-} from '@/mock/data'
 
 /** 后端 UserVO 原始结构 */
 interface RawUser {
@@ -90,9 +84,6 @@ function mapFriendRequest(r: RawFriendRequest, type: 'received' | 'sent'): Frien
 
 /** 获取好友列表 */
 export function getFriends() {
-  if (USE_MOCK) {
-    return Promise.resolve<Friend[]>(JSON.parse(JSON.stringify(MOCK_FRIENDS)))
-  }
   return request
     .get<unknown, RawUser[]>('/friend/list')
     .then((list) => (list || []).map(mapFriend))
@@ -100,12 +91,6 @@ export function getFriends() {
 
 /** 通过邮箱搜索用户 */
 export function searchUser(keyword: string) {
-  if (USE_MOCK) {
-    // Mock：仅按邮箱匹配
-    const kw = keyword.toLowerCase()
-    const matched = MOCK_FRIENDS.filter((f) => (f.email || '').toLowerCase().includes(kw))
-    return Promise.resolve<Friend[]>(matched)
-  }
   return request
     .get<unknown, RawUser[]>('/friend/search', { params: { keyword } })
     .then((list) => (list || []).map(mapFriend))
@@ -113,9 +98,6 @@ export function searchUser(keyword: string) {
 
 /** 发送好友请求（toUid 为目标用户 ID） */
 export function sendFriendRequest(targetUserId: string | number, message?: string) {
-  if (USE_MOCK) {
-    return Promise.resolve(true)
-  }
   return request.post<unknown, boolean>('/friend/request', null, {
     params: { toUid: targetUserId, message }
   })
@@ -123,9 +105,6 @@ export function sendFriendRequest(targetUserId: string | number, message?: strin
 
 /** 获取收到的好友请求 */
 export function getPendingRequests() {
-  if (USE_MOCK) {
-    return Promise.resolve<FriendRequest[]>(JSON.parse(JSON.stringify(MOCK_PENDING_REQUESTS)))
-  }
   return request
     .get<unknown, RawFriendRequest[]>('/friend/requests/received')
     .then((list) => (list || []).map((r) => mapFriendRequest(r, 'received')))
@@ -133,9 +112,6 @@ export function getPendingRequests() {
 
 /** 获取已发送的好友请求 */
 export function getSentRequests() {
-  if (USE_MOCK) {
-    return Promise.resolve<FriendRequest[]>(JSON.parse(JSON.stringify(MOCK_SENT_REQUESTS)))
-  }
   return request
     .get<unknown, RawFriendRequest[]>('/friend/requests/sent')
     .then((list) => (list || []).map((r) => mapFriendRequest(r, 'sent')))
@@ -143,24 +119,15 @@ export function getSentRequests() {
 
 /** 接受好友请求 */
 export function acceptFriendRequest(requestId: string | number) {
-  if (USE_MOCK) {
-    return Promise.resolve(true)
-  }
   return request.put<unknown, boolean>(`/friend/request/${requestId}/accept`)
 }
 
 /** 拒绝好友请求 */
 export function rejectFriendRequest(requestId: string | number) {
-  if (USE_MOCK) {
-    return Promise.resolve(true)
-  }
   return request.put<unknown, boolean>(`/friend/request/${requestId}/reject`)
 }
 
 /** 删除好友 */
 export function deleteFriend(friendId: string | number) {
-  if (USE_MOCK) {
-    return Promise.resolve(true)
-  }
   return request.delete<unknown, boolean>(`/friend/${friendId}`)
 }

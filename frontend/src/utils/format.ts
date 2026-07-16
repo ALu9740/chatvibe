@@ -193,13 +193,11 @@ export function isAvatarUrl(avatar?: string): boolean {
 /**
  * 解析上传文件的访问 URL
  * 开发环境下 VITE_API_BASE 为后端绝对地址(https://localhost:8080/api)，
- * 需将 /uploads/... 拼接后端 origin；生产环境下为相对路径 /api，保持 /uploads/... 不变。
  */
 export function resolveUploadUrl(url?: string): string {
   if (!url) return ''
   // 已经是绝对地址或 data URI，直接返回
   if (url.startsWith('http') || url.startsWith('data:')) return url
-  // /uploads/... 等相对路径：拼接后端 origin
   if (url.startsWith('/')) {
     const apiBase = import.meta.env.VITE_API_BASE || ''
     const origin = apiBase.replace(/\/api\/?$/, '')

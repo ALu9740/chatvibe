@@ -3,13 +3,11 @@ import { useChatStore } from '@/stores/chat'
 import { getToken } from '@/utils/request'
 import type { Message } from '@/types'
 import { generateId } from '@/utils/format'
-import { USE_MOCK, AI_REPLIES } from '@/mock/data'
 
 /** AI 流式输出 composable：直接消费后端 /ai/chat 的 SSE 流，消息写入 chatStore */
 export function useAiStream() {
   const chatStore = useChatStore()
   const streaming = ref(false)
-  let mockTimer: ReturnType<typeof setInterval> | null = null
 
   /**
    * 发送 AI 提问并消费服务端 SSE 流式回复
@@ -38,39 +36,12 @@ export function useAiStream() {
     chatStore.messageMap[conversationId].push(aiMsg)
 
     try {
-      if (USE_MOCK) {
-        await streamFromMock(conversationId, aiMsgId)
-      } else {
-        await streamFromServer(conversationId, question, aiMsgId)
-      }
+      await streamFromServer(conversationId, question, aiMsgId)
     } finally {
       streaming.value = false
       // 确保流式标记关闭
       updateAiMessage(conversationId, aiMsgId, '', true)
     }
-  }
-
-  /** Mock 模式：本地按字符流式输出 AI 回复 */
-  async function streamFromMock(conversationId: string, aiMsgId: string): Promise<void> {
-    const replyText = AI_REPLIES[Math.floor(Math.random() * AI_REPLIES.length)]
-    return new Promise<void>((resolve) => {
-      let index = 0
-      mockTimer = setInterval(() => {
-        if (index >= replyText.length) {
-          if (mockTimer) {
-            clearInterval(mockTimer)
-            mockTimer = null
-          }
-          resolve()
-          return
-        }
-        // 每次输出 2-4 个字符，模拟真实打字节奏
-        const step = Math.min(2 + Math.floor(Math.random() * 3), replyText.length - index)
-        const delta = replyText.slice(index, index + step)
-        updateAiMessage(conversationId, aiMsgId, delta, false)
-        index += step
-      }, 50)
-    })
   }
 
   /** 调用后端 /ai/chat SSE 流式接口并逐片段投递到 chatStore */
@@ -147,10 +118,6 @@ export function useAiStream() {
 
   /** 手动停止流式输出 */
   function stop(conversationId: string): void {
-    if (mockTimer) {
-      clearInterval(mockTimer)
-      mockTimer = null
-    }
     streaming.value = false
     // 标记当前会话最后一条 AI 消息为非流式
     const list = chatStore.messageMap[conversationId]

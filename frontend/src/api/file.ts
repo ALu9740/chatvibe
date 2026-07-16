@@ -10,7 +10,7 @@ export interface FileUploadResult {
 
 /**
  * 上传文件(聊天图片/文件)
- * 后端保存到 /uploads/file/{uuid}.ext
+ * 后端保存到 MinIO，返回 /minio/{bucket}/file/{uuid}.ext
  */
 export function uploadFile(file: File): Promise<FileUploadResult> {
   const formData = new FormData()

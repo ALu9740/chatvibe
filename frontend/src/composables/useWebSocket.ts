@@ -7,7 +7,6 @@ import { useNotificationStore } from '@/stores/notification'
 import { getToken, removeToken } from '@/utils/request'
 import type { WsMessage } from '@/types'
 import { toast } from '@/utils/toast'
-import { USE_MOCK } from '@/mock/data'
 
 /**
  * 后端广播的 Message 实体原始结构（与 stores/chat.ts 中的 RawMessage 一致）
@@ -34,8 +33,6 @@ export function useWebSocket() {
 
   /** 建立 STOMP 连接 */
   function connect(): void {
-    // Mock 模式：跳过真实 WebSocket 连接
-    if (USE_MOCK) return
     const authStore = useAuthStore()
     if (!authStore.isLoggedIn) return
 

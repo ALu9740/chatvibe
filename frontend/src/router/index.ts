@@ -54,8 +54,8 @@ const router = createRouter({
   }
 })
 
-// 全局前置守卫：登录态校验
-router.beforeEach((to, _from, next) => {
+// 全局前置守卫：登录态校验 + 刷新后恢复用户信息
+router.beforeEach(async (to, _from, next) => {
   const authStore = useAuthStore()
   // 设置页面标题
   if (to.meta.title) {
@@ -65,6 +65,17 @@ router.beforeEach((to, _from, next) => {
   if (to.meta.requiresAuth && !authStore.isLoggedIn) {
     next({ name: 'login', query: { redirect: to.fullPath } })
     return
+  }
+  // 已登录但用户信息缺失（页面刷新后 Pinia 状态丢失）→ 拉取用户信息
+  if (authStore.isLoggedIn && !authStore.user) {
+    try {
+      await authStore.fetchUser()
+    } catch {
+      // 拉取失败（token 过期等）→ 清除登录态并跳登录页
+      authStore.logoutLocal()
+      next({ name: 'login', query: { redirect: to.fullPath } })
+      return
+    }
   }
   // 已登录访问登录/注册/找回密码页 → 跳聊天页
   if ((to.name === 'login' || to.name === 'register' || to.name === 'forgot-password') && authStore.isLoggedIn) {

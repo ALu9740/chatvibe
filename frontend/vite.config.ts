@@ -12,9 +12,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   // SSL 证书路径：优先从环境变量读取，默认使用同级 ssl 目录
-  // 生成方式: mkcert chatvibe.icu localhost 127.0.0.1 ::1
-  const certPath = env.SSL_CERT_PATH || fileURLToPath(new URL('./ssl/chatvibe.icu+3.pem', import.meta.url))
-  const keyPath = env.SSL_KEY_PATH || fileURLToPath(new URL('./ssl/chatvibe.icu+3-key.pem', import.meta.url))
+  // 生成方式: localhost 127.0.0.1 ::1
+  const certPath = env.SSL_CERT_PATH || fileURLToPath(new URL('./ssl/localhost+2.pem', import.meta.url))
+  const keyPath = env.SSL_KEY_PATH || fileURLToPath(new URL('./ssl/localhost+2-key.pem', import.meta.url))
 
   // 开发服务器是否启用 HTTPS（证书存在时自动启用）
   const enableHttps = env.SSL_ENABLED !== 'false' && existsSync(certPath) && existsSync(keyPath)
@@ -46,7 +46,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     server: {
-      host: env.VITE_DEV_HOST || 'localhost',
+      host: env.VITE_DEV_HOST || '0.0.0.0',
       port: 5173,
       ...(enableHttps ? {
         https: {
@@ -61,12 +61,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false
         },
-        // 上传文件静态资源代理
-        '/uploads': {
-          target: apiTarget,
-          changeOrigin: true,
-          secure: false
-        },
+        //MinIO
+        '/minio': { 
+          target: apiTarget, 
+          changeOrigin: true, 
+          secure: false 
+        }, 
         // WebSocket 代理
         '/ws-chat': {
           target: apiTarget,

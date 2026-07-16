@@ -26,7 +26,6 @@ function onContextmenu(e: MouseEvent, conv: Conversation) {
 // 直接展示即可；@AI 标签由模板单独处理
 function preview(conv: Conversation): string {
   if (!conv.lastMessage) return ''
-  // 兼容 mock 模式：若 lastMessage 是 URL 且无类型信息，尝试转换
   if (conv.lastMessageType === 1) return '[图片]'
   if (conv.lastMessageType === 3) {
     // 后端已存为 [文件]文件名 格式，直接返回

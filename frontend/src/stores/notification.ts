@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as notificationApi from '@/api/notification'
 import type { NotificationItem } from '@/types'
+import { notify } from '@/utils/notify'
 
 /** 后端 NotificationVO 原始结构 */
 interface RawNotification {
@@ -90,6 +91,8 @@ export const useNotificationStore = defineStore('notification', () => {
     if (notifications.value.some((n) => n.id === item.id)) return
     notifications.value.unshift(item)
     if (!item.isRead) unreadCount.value++
+    // 触发桌面通知 + 声音
+    notify(item.title, item.content || '')
   }
 
   function togglePanel() {

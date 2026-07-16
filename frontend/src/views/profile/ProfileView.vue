@@ -15,6 +15,7 @@ import { sendCode } from '@/api/auth'
 import { getAvatarText, isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import { toast } from '@/utils/toast'
 import type { NotificationPreferences } from '@/types'
+import { updatePreferences } from '@/utils/notify'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -42,6 +43,18 @@ const notifications = reactive<NotificationPreferences>({
   aiAlert: false
 })
 
+async function toggleNotification(key: keyof NotificationPreferences) {
+  notifications[key] = !notifications[key]
+  try {
+    await updateNotificationPreferences({ ...notifications })
+    // 同步更新本地缓存
+    updatePreferences({ ...notifications })
+  } catch {
+    notifications[key] = !notifications[key]
+    toast.error('保存失败', '通知偏好更新失败，请稍后重试')
+  }
+}
+
 // 加载通知偏好
 async function loadNotifications() {
   try {
@@ -51,18 +64,6 @@ async function loadNotifications() {
     notifications.aiAlert = data.aiAlert
   } catch {
     // 加载失败保持默认值
-  }
-}
-
-// 切换通知偏好并保存
-async function toggleNotification(key: keyof NotificationPreferences) {
-  notifications[key] = !notifications[key]
-  try {
-    await updateNotificationPreferences({ ...notifications })
-  } catch {
-    // 保存失败回滚
-    notifications[key] = !notifications[key]
-    toast.error('保存失败', '通知偏好更新失败，请稍后重试')
   }
 }
 

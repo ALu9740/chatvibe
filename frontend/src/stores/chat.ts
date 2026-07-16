@@ -11,12 +11,7 @@ import type {
   WsMessage
 } from '@/types'
 import { generateId } from '@/utils/format'
-import {
-  USE_MOCK,
-  MOCK_CONVERSATIONS,
-  MOCK_MESSAGES,
-  DEFAULT_MESSAGES
-} from '@/mock/data'
+import { notifyChatMessage } from '@/utils/notify'
 
 /** 后端 ConversationVO 原始结构 */
 interface RawConversation {
@@ -169,11 +164,6 @@ function mapMessage(raw: RawMessage, currentUserId?: string | number): Message {
   }
 }
 
-/** 深拷贝辅助 */
-function deepClone<T>(data: T): T {
-  return JSON.parse(JSON.stringify(data))
-}
-
 /** 聊天状态 store：管理会话列表、当前会话、消息记录与未读计数 */
 export const useChatStore = defineStore('chat', () => {
   const authStore = useAuthStore()
@@ -212,15 +202,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 拉取会话列表 */
   async function fetchConversations(): Promise<void> {
-    if (USE_MOCK) {
-      // Mock 模式：直接使用已映射的 mock 数据
-      conversations.value = deepClone(MOCK_CONVERSATIONS)
-      // 预填充已知会话的消息记录
-      Object.keys(MOCK_MESSAGES).forEach((key) => {
-        messageMap.value[key] = deepClone(MOCK_MESSAGES[key])
-      })
-      return
-    }
     const list = await chatApi.getConversations()
     conversations.value = (list as unknown as RawConversation[]).map(mapConversation)
   }
@@ -235,28 +216,12 @@ export const useChatStore = defineStore('chat', () => {
     if (!messageMap.value[conversationId]) {
       await fetchMessages(conversationId)
     }
-    if (!USE_MOCK) {
-      // 通知后端已读
-      await chatApi.markRead(conversationId)
-    }
+    // 通知后端已读
+    await chatApi.markRead(conversationId)
   }
 
   /** 拉取某个会话的历史消息（初始加载，获取最新一页） */
   async function fetchMessages(conversationId: string): Promise<void> {
-    if (USE_MOCK) {
-      // Mock 模式：优先使用预设消息，否则使用默认消息
-      if (MOCK_MESSAGES[conversationId]) {
-        messageMap.value[conversationId] = deepClone(MOCK_MESSAGES[conversationId])
-      } else {
-        const defaults = deepClone(DEFAULT_MESSAGES).map((m) => ({
-          ...m,
-          conversationId
-        }))
-        messageMap.value[conversationId] = defaults
-      }
-      hasMoreMap.value[conversationId] = false
-      return
-    }
     const size = 20
     const list = await chatApi.getMessages(conversationId, undefined, size)
     const uid = authStore.user?.id
@@ -270,7 +235,7 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 上拉加载更多历史消息，返回新加载的消息条数 */
   async function loadMoreMessages(conversationId: string): Promise<number> {
-    if (USE_MOCK || loadingMore.value) return 0
+    if (loadingMore.value) return 0
     if (!hasMoreMap.value[conversationId]) return 0
     const messages = messageMap.value[conversationId]
     if (!messages || messages.length === 0) return 0
@@ -316,12 +281,6 @@ export const useChatStore = defineStore('chat', () => {
     // 更新会话最后一条消息预览
     updateLastMessage(payload.conversationId, buildPreviewText(payload.type, payload.content, payload.extra), typeToInt(payload.type))
 
-    if (USE_MOCK) {
-      // Mock 模式：模拟对方/AI 回复
-      mockReply(payload)
-      return
-    }
-
     const real = (await chatApi.sendMessage(payload)) as unknown as RawMessage
     const mapped = mapMessage(real, authStore.user?.id)
     // 用真实消息替换临时消息
@@ -330,51 +289,8 @@ export const useChatStore = defineStore('chat', () => {
     if (idx !== -1) list[idx] = mapped
   }
 
-  /** Mock 模式：模拟对方回复（AI 回复由 handleAiReply→useAiStream.ask 统一处理，此处不再触发） */
-  function mockReply(payload: SendMessageRequest): void {
-    const conv = conversations.value.find((c) => c.id === payload.conversationId)
-    if (!conv) return
-
-    // @AI 或 AI 会话：AI 流式回复由 useAiStream.ask 处理，此处跳过
-    if (payload.mentionAI || conv.isAI) {
-      return
-    }
-
-    // 私聊/群聊：模拟对方回复（仅 60% 概率回复，避免每次都回）
-    if (Math.random() < 0.6) {
-      setTimeout(() => {
-        const replies = [
-          '收到～',
-          '好的，我看看',
-          '稍等，正在处理',
-          '没问题',
-          '嗯嗯，了解了',
-          '明白，我安排一下'
-        ]
-        const reply: Message = {
-          id: generateId('m'),
-          conversationId: payload.conversationId,
-          sender: 'other',
-          name: conv.name,
-          avatar: conv.avatar,
-          color: conv.color,
-          type: 'TEXT',
-          content: replies[Math.floor(Math.random() * replies.length)],
-          time: new Date().toISOString()
-        }
-        if (!messageMap.value[payload.conversationId]) {
-          messageMap.value[payload.conversationId] = []
-        }
-        messageMap.value[payload.conversationId].push(reply)
-        updateLastMessage(payload.conversationId, reply.content)
-      }, 800 + Math.random() * 1200)
-    }
-  }
-
   /** 处理 WebSocket 收到的新消息（兼容包装结构与裸 Message） */
   function handleIncomingMessage(payload: WsMessage | RawMessage | { event?: string; conversationId?: number | string; message?: string }): void {
-    if (USE_MOCK) return // Mock 模式不处理 WebSocket 消息
-
     // 1. 处理特殊事件（如群组解散）
     const eventPayload = payload as { event?: string; conversationId?: number | string; message?: string }
     if (eventPayload.event === 'dissolved') {
@@ -446,6 +362,14 @@ export const useChatStore = defineStore('chat', () => {
       // 刷新会话列表以获取恢复的会话，避免遗漏新消息。
       fetchConversations().catch(() => {})
     }
+    // 只在非当前会话、且非自己发送的消息时通知
+    if (conv && currentConversation.value?.id !== conversationId && message.sender !== 'self') {
+      const senderName = raw.senderName || '未知'
+      const preview = message.type === 'IMAGE' ? '[图片]'
+        : message.type === 'FILE' ? '[文件]'
+        : message.content || ''
+      notifyChatMessage(senderName, preview, false, message.sender === 'ai')
+    }
   }
 
   /** 更新会话最后一条消息 */
@@ -462,7 +386,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 处理 WebSocket 收到的用户状态变更：更新私聊会话的对方状态，同时同步当前用户自身状态 */
   function handleStatusChange(payload: { userId: number | string; status: number }): void {
-    if (USE_MOCK) return
     const targetId = String(payload.userId)
     const status = Number(payload.status)
     // 如果是当前用户自己的状态变更（如刷新后 WebSocket 重连），同步到 authStore
@@ -481,9 +404,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 拉取当前用户的所有群聊会话（含已从会话列表删除但未退出群组的，用于群组管理弹窗） */
   async function fetchAllGroupConversations(): Promise<Conversation[]> {
-    if (USE_MOCK) {
-      return deepClone(MOCK_CONVERSATIONS).filter((c) => c.type === 'group')
-    }
     const list = await chatApi.getMyGroupConversations()
     return (list as unknown as RawConversation[]).map(mapConversation)
   }
@@ -498,11 +418,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 切换会话消息免打扰（调用后端 + 同步本地状态） */
   async function toggleMute(conversationId: string): Promise<boolean> {
-    if (USE_MOCK) {
-      const conv = conversations.value.find((c) => c.id === conversationId)
-      if (conv) conv.muted = conv.muted ? 0 : 1
-      return !!conv?.muted
-    }
     const muted = await chatApi.toggleMute(conversationId)
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (conv) conv.muted = muted ? 1 : 0
@@ -511,11 +426,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 切换会话置顶（调用后端 + 同步本地状态） */
   async function togglePin(conversationId: string): Promise<boolean> {
-    if (USE_MOCK) {
-      const conv = conversations.value.find((c) => c.id === conversationId)
-      if (conv) conv.pinned = conv.pinned ? 0 : 1
-      return !!conv?.pinned
-    }
     const pinned = await chatApi.togglePin(conversationId)
     const conv = conversations.value.find((c) => c.id === conversationId)
     if (conv) conv.pinned = pinned ? 1 : 0
@@ -524,16 +434,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 删除会话（调用后端持久化 + 从本地列表移除） */
   async function deleteConversation(conversationId: string): Promise<void> {
-    if (USE_MOCK) {
-      const idx = conversations.value.findIndex((c) => c.id === conversationId)
-      if (idx !== -1) conversations.value.splice(idx, 1)
-      if (currentConversation.value?.id === conversationId) {
-        currentConversation.value = null
-      }
-      delete messageMap.value[conversationId]
-      delete hasMoreMap.value[conversationId]
-      return
-    }
     await chatApi.deleteConversation(conversationId)
     const idx = conversations.value.findIndex((c) => c.id === conversationId)
     if (idx !== -1) conversations.value.splice(idx, 1)
@@ -547,9 +447,7 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 隐藏（删除）单条消息（仅对当前用户隐藏，持久化到后端） */
   async function hideMessage(conversationId: string, messageId: string): Promise<void> {
-    if (!USE_MOCK) {
-      await chatApi.hideMessage(messageId)
-    }
+    await chatApi.hideMessage(messageId)
     const list = messageMap.value[conversationId]
     if (list) {
       const idx = list.findIndex((m) => m.id === messageId)
@@ -559,9 +457,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 重新加入群聊会话（恢复会话列表显示） */
   async function rejoinGroup(conversationId: string): Promise<Conversation | null> {
-    if (USE_MOCK) {
-      return conversations.value.find((c) => c.id === conversationId) || null
-    }
     const raw = await chatApi.rejoinConversation(conversationId)
     const conv = mapConversation(raw as unknown as RawConversation)
     // 清除旧消息缓存，重新拉取时按新加入时间过滤（无法看到加入前的历史消息）
@@ -572,11 +467,6 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 通过好友创建/恢复私聊会话（删除会话后重新创建，无法看到旧消息） */
   async function createPrivateConversationWith(targetUserId: string): Promise<Conversation | null> {
-    if (USE_MOCK) {
-      return conversations.value.find(
-        (c) => c.type === 'private' && c.targetId === targetUserId
-      ) || null
-    }
     const raw = await chatApi.createPrivateConversation(targetUserId)
     const conv = mapConversation(raw as unknown as RawConversation)
     // 清除旧消息缓存，确保恢复后按新加入时间过滤（看不到删除前的历史）
@@ -592,9 +482,7 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 清空当前会话的聊天记录（仅对当前用户隐藏，其他成员仍可见） */
   async function clearHistory(conversationId: string): Promise<void> {
-    if (!USE_MOCK) {
-      await chatApi.clearHistory(conversationId)
-    }
+    await chatApi.clearHistory(conversationId)
     // 清除前端消息缓存，重新拉取时后端按新 created_at 过滤（返回空列表）
     delete messageMap.value[conversationId]
     messageMap.value[conversationId] = []

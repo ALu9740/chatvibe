@@ -1,6 +1,5 @@
 import request from '@/utils/request'
 import type { CreateGroupRequest, Group, GroupMember, GroupRole } from '@/types'
-import { USE_MOCK, MOCK_GROUP_MEMBERS } from '@/mock/data'
 
 /** 后端 ConversationVO 原始结构 */
 interface RawConversation {
@@ -75,9 +74,6 @@ function mapMember(m: RawGroupMember): GroupMember {
  * 后端无独立群列表接口，复用会话列表并过滤群聊类型
  */
 export function getGroups() {
-  if (USE_MOCK) {
-    return Promise.resolve<Group[]>([])
-  }
   return request
     .get<unknown, RawConversation[]>('/chat/conversations')
     .then((list) => (list || []).filter((c) => Number(c.type) === 2).map(mapGroup))
@@ -85,18 +81,11 @@ export function getGroups() {
 
 /** 获取群组详情 */
 export function getGroupDetail(groupId: string | number) {
-  if (USE_MOCK) {
-    return Promise.resolve<Group>({ id: String(groupId), name: '群组', members: 0 })
-  }
   return request.get<unknown, RawConversation>(`/group/${groupId}`).then(mapGroup)
 }
 
 /** 获取群成员列表 */
 export function getGroupMembers(groupId: string | number) {
-  if (USE_MOCK) {
-    const members = MOCK_GROUP_MEMBERS[String(groupId)] || []
-    return Promise.resolve<GroupMember[]>(JSON.parse(JSON.stringify(members)))
-  }
   return request
     .get<unknown, RawGroupMember[]>(`/group/${groupId}/members`)
     .then((list) => (list || []).map(mapMember))
@@ -104,14 +93,6 @@ export function getGroupMembers(groupId: string | number) {
 
 /** 创建群组（memberIds 字符串数组转数字数组以匹配后端 List<Long>） */
 export function createGroup(data: CreateGroupRequest) {
-  if (USE_MOCK) {
-    return Promise.resolve<Group>({
-      id: 'g_' + Date.now(),
-      name: data.name,
-      members: data.memberIds.length + 1,
-      ownerId: 'u_me'
-    })
-  }
   const payload = {
     name: data.name,
     memberIds: data.memberIds.map((id) => Number(id)).filter((n) => !isNaN(n))
@@ -121,25 +102,16 @@ export function createGroup(data: CreateGroupRequest) {
 
 /** 退出群组 */
 export function leaveGroup(groupId: string | number) {
-  if (USE_MOCK) {
-    return Promise.resolve(true)
-  }
   return request.delete<unknown, boolean>(`/group/${groupId}/leave`)
 }
 
 /** 移除群成员（仅群主可操作） */
 export function removeMember(groupId: string | number, userId: string | number) {
-  if (USE_MOCK) {
-    return Promise.resolve(true)
-  }
   return request.delete<unknown, boolean>(`/group/${groupId}/members/${userId}`)
 }
 
 /** 邀请成员加入群组（后端接收 List<Long> 请求体） */
 export function inviteMembers(groupId: string | number, memberIds: string[]) {
-  if (USE_MOCK) {
-    return Promise.resolve(true)
-  }
   const ids = memberIds.map((id) => Number(id)).filter((n) => !isNaN(n))
   return request.post<unknown, boolean>(`/group/${groupId}/members`, ids)
 }
