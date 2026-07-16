@@ -158,6 +158,8 @@ public class AuthServiceImpl implements AuthService {
 
         // 5. 原子递增 loginVersion + 置在线（修复读改写竞态，规避缓存陈旧）
         userMapper.incrLoginVersionAndSetOnline(user.getId(), UserStatusEnum.ONLINE.getCode());
+        // 同步 Redis 状态 + 清除 Caffeine 缓存，避免 Redis 残留旧离线值导致 getUserStatus 返回陈旧数据
+        userService.syncStatusToRedis(user.getId(), UserStatusEnum.ONLINE.getCode());
         Integer newVersion = userMapper.selectLoginVersion(user.getId());
         user.setLoginVersion(newVersion);
         user.setStatus(UserStatusEnum.ONLINE.getCode());
@@ -223,11 +225,8 @@ public class AuthServiceImpl implements AuthService {
         // 4. 递增 loginVersion + 置离线 -> 使旧 Token 立即失效
         userMapper.incrLoginVersionAndSetOnline(user.getId(), UserStatusEnum.OFFLINE.getCode());
 
-        // 5. 清除 Caffeine 用户信息缓存
-        Cache userInfoCache = cacheManager.getCache("userInfo");
-        if (userInfoCache != null) {
-            userInfoCache.evict(user.getId());
-        }
+        // 5. 同步 Redis 状态 + 清除 Caffeine 缓存
+        userService.syncStatusToRedis(user.getId(), UserStatusEnum.OFFLINE.getCode());
 
         // 6. 删除已使用的验证码
         stringRedisTemplate.delete(CODE_KEY_PREFIX + dto.getEmail());
@@ -259,11 +258,8 @@ public class AuthServiceImpl implements AuthService {
         // 1. 递增 loginVersion + 置离线 -> 使旧 Token 真正失效
         userMapper.incrLoginVersionAndSetOnline(userId, UserStatusEnum.OFFLINE.getCode());
 
-        // 2. 清除 Caffeine 用户信息缓存
-        Cache userInfoCache = cacheManager.getCache("userInfo");
-        if (userInfoCache != null) {
-            userInfoCache.evict(userId);
-        }
+        // 2. 同步 Redis 状态 + 清除 Caffeine 缓存
+        userService.syncStatusToRedis(userId, UserStatusEnum.OFFLINE.getCode());
 
         // 3. 通过 MQ 异步广播离线状态（不阻塞登出响应）
         userLogoutEventProducer.sendLogoutEvent(

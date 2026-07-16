@@ -260,6 +260,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         updateStatus(userId, status);
     }
 
+    @Override
+    public void syncStatusToRedis(Long userId, Integer status) {
+        stringRedisTemplate
+                .opsForValue()
+                .set(USER_STATUS_KEY_PREFIX + userId, status.toString(), STATUS_TTL);
+        evictUserInfoCache(userId);
+    }
+
     private void broadcastStatus(Long userId, Integer status) {
         try {
             messagingTemplate.convertAndSend("/topic/status", new WsStatusMessage(userId, status));

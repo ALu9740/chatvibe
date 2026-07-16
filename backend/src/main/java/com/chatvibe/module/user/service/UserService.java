@@ -91,13 +91,22 @@ public interface UserService extends IService<User> {
     UserVO toVO(User user);
 
     /**
-     * 更新在线状态（写库 + 广播）
-     * 用于：登录置在线、登出置离线、WebSocket 上下线（已不再触发）等场景
+     * 更新在线状态（写库 + 写 Redis + 清缓存 + 广播）
+     * 用于：手动修改状态、Token 过期置离线等场景
      *
      * @param userId 用户ID
      * @param status 状态值
      */
     void updateStatus(Long userId, Integer status);
+
+    /**
+     * 仅同步状态到 Redis + 清除 Caffeine 缓存（不写 DB，不广播）
+     * 用于 login/logout 后同步 Redis，避免 Redis 与 DB 状态不一致
+     *
+     * @param userId 用户ID
+     * @param status 状态值
+     */
+    void syncStatusToRedis(Long userId, Integer status);
 
     /**
      * 用户手动更新在线状态
