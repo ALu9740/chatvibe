@@ -20,6 +20,8 @@ import com.chatvibe.module.user.vo.NotificationPreferencesVO;
 import com.chatvibe.module.user.vo.UserVO;
 import com.chatvibe.security.SecurityUtils;
 import com.chatvibe.websocket.dto.WsStatusMessage;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +40,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -132,6 +135,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         updateById(user);
         evictUserInfoCache(userId);
+        Cache searchCache = cacheManager.getCache("userSearch");
+        if (searchCache != null) {
+            searchCache.clear();
+        }
         return toVO(user);
     }
 
@@ -207,14 +214,36 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .set(User::getAvatar, url));
         log.info("[用户] 头像上传成功: userId={}, url={}", userId, url);
         evictUserInfoCache(userId);
+        Cache searchCache = cacheManager.getCache("userSearch");
+        if (searchCache != null) {
+            searchCache.clear();
+        }
         return url;
     }
 
     @Override
+    @RateLimiter(name = "searchRateLimiter", fallbackMethod = "searchFallback")
+    @CircuitBreaker(name = "searchService", fallbackMethod = "searchFallback")
     public List<UserVO> searchUsers(String keyword) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
-        List<User> users = baseMapper.searchUsers(keyword, currentUserId);
-        return users.stream().map(this::toVO).collect(Collectors.toList());
+        // 1. 关键字校验：trim + 长度限制，空串直接返回空列表
+        String kw = keyword == null ? "" : keyword.trim();
+        if (kw.isEmpty() || kw.length() > 255) {
+            return Collections.emptyList();
+        }
+        // 2. 查 Caffeine 缓存（命中直接返回，未命中自动查库并回写）
+        Cache searchCache = cacheManager.getCache("userSearch");
+        List<User> users;
+        if (searchCache != null) {
+            users = searchCache.get(kw, () -> baseMapper.searchUsers(kw));
+        } else {
+            users = baseMapper.searchUsers(kw);
+        }
+        // 3. 内存中过滤自身 + 转 VO
+        return users.stream()
+                .filter(u -> !u.getId().equals(currentUserId))
+                .map(this::toVO)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -403,5 +432,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     /** 限流降级：更换邮箱限流 */
     private void changeEmailRateLimitFallback(ChangeEmailDTO dto, Throwable t) {
         throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+    }
+
+    /** 搜索降级：限流拒绝 → 抛 429；熔断打开/DB异常 → 返回空列表保前端可用 */
+    private List<UserVO> searchFallback(String keyword, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        log.warn("[用户] 搜索熔断降级: keyword={}, err={}", keyword, t.getMessage());
+        return Collections.emptyList();
     }
 }

@@ -19,9 +19,15 @@ public class ChatVibeApplication {
     public static void main(String[] args) {
         SpringApplication.run(ChatVibeApplication.class, args);
         System.out.println("""
-                ====================================================
-                  ChatVibe Backend Started Successfully
-                ====================================================
-                """);
+            
+            ____ _           _     __     ___  _         \s
+           / ___| |__   __ _| |_   \\ \\   / (_)| |__   ___\s
+          | |   | '_ \\ / _` | __|   \\ \\ / /| || '_ \\ / _ \\
+          | |___| | | | (_| | |_     \\ V / | || |_) |  __/
+           \\____|_| |_|\\__,_|\\__|     \\_/  |_||_.__/ \\___|
+           
+          :: ChatVibe  v1.0  —  by Alu ::
+          ======================================================
+          """);
     }
 }

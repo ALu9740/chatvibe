@@ -31,6 +31,11 @@ public class CacheConfig {
                 .maximumSize(500)
                 .recordStats());
         cacheManager.setCacheNames(List.of("userInfo", "userEmail","emailExists","userNotifyPrefs"));
+        cacheManager.registerCustomCache("userSearch",Caffeine.newBuilder()
+                .expireAfterWrite(1, TimeUnit.MINUTES)
+                .maximumSize(200)
+                .recordStats()
+                .build());
         return cacheManager;
     }
 

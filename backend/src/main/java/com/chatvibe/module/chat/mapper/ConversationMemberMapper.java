@@ -22,9 +22,6 @@ public interface ConversationMemberMapper extends BaseMapper<ConversationMember>
      * @param conversationId 会话ID
      * @param userId         用户ID
      */
-    @Update("UPDATE conversation_member SET deleted = 0, unread_count = 0, " +
-            "last_read_at = NOW(), created_at = NOW(), updated_at = NOW() " +
-            "WHERE conversation_id = #{conversationId} AND user_id = #{userId}")
     void restoreMember(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
     /**
@@ -35,9 +32,6 @@ public interface ConversationMemberMapper extends BaseMapper<ConversationMember>
      * @param conversationId 会话ID
      * @param userId         用户ID
      */
-    @Update("UPDATE conversation_member SET created_at = NOW(), unread_count = 0, " +
-            "last_read_at = NOW(), updated_at = NOW() " +
-            "WHERE conversation_id = #{conversationId} AND user_id = #{userId}")
     void clearHistory(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
     /**
@@ -47,10 +41,6 @@ public interface ConversationMemberMapper extends BaseMapper<ConversationMember>
      * @param conversationId 会话ID
      * @param senderId       发送者ID（不恢复发送者自己）
      */
-    @Update("UPDATE conversation_member SET deleted = 0, created_at = NOW(), updated_at = NOW() " +
-            "WHERE conversation_id = #{conversationId} " +
-            "AND user_id != #{senderId} " +
-            "AND deleted = 1")
     void restoreDeletedMembers(@Param("conversationId") Long conversationId, @Param("senderId") Long senderId);
 
     /**
@@ -60,12 +50,6 @@ public interface ConversationMemberMapper extends BaseMapper<ConversationMember>
      * @param conversationId 会话ID
      * @param senderId       发送者ID（不恢复发送者自己）
      */
-    @Update("UPDATE conversation_member cm INNER JOIN group_member gm " +
-            "ON gm.conversation_id = cm.conversation_id AND gm.user_id = cm.user_id AND gm.deleted = 0 " +
-            "SET cm.deleted = 0, cm.created_at = NOW(), cm.updated_at = NOW() " +
-            "WHERE cm.conversation_id = #{conversationId} " +
-            "AND cm.user_id != #{senderId} " +
-            "AND cm.deleted = 1")
     void restoreDeletedGroupMembers(@Param("conversationId") Long conversationId, @Param("senderId") Long senderId);
 
     /**
@@ -75,23 +59,17 @@ public interface ConversationMemberMapper extends BaseMapper<ConversationMember>
      * @param userId 当前用户ID
      * @return 好友用户ID列表
      */
-    @Select("SELECT DISTINCT cm2.user_id FROM conversation_member cm1 " +
-            "INNER JOIN conversation c ON cm1.conversation_id = c.id " +
-            "INNER JOIN conversation_member cm2 ON cm2.conversation_id = c.id AND cm2.user_id != cm1.user_id " +
-            "WHERE cm1.user_id = #{userId} AND c.type = 1")
     List<Long> selectFriendIdsIgnoreDeleted(@Param("userId") Long userId);
 
     /**
      * 物理删除指定会话中两个用户的成员记录（彻底解除好友关系）。
-     * 用于删除好友场景：区别于删除会话的逻辑删除（仅隐藏列表，保留好友关系），
+     * 用于删除好友场景：区别于删除会话的逻辑删除（隐藏会话，清除聊天记录，保留好友关系），
      * 物理删除使记录彻底不存在，selectFriendIdsIgnoreDeleted 将查不到该好友。
      *
      * @param conversationId 私聊会话ID
      * @param userIdA        用户A ID
      * @param userIdB        用户B ID
      */
-    @Delete("DELETE FROM conversation_member WHERE conversation_id = #{conversationId} " +
-            "AND user_id IN (#{userIdA}, #{userIdB})")
     void physicalDeleteMembers(@Param("conversationId") Long conversationId,
                                @Param("userIdA") Long userIdA,
                                @Param("userIdB") Long userIdB);
@@ -105,7 +83,6 @@ public interface ConversationMemberMapper extends BaseMapper<ConversationMember>
      * @param userId         用户ID
      * @return 成员记录（可能为 null，或 deleted=0/1 的记录）
      */
-    @Select("SELECT * FROM conversation_member WHERE conversation_id = #{conversationId} AND user_id = #{userId}")
     ConversationMember selectIgnoreDeleted(@Param("conversationId") Long conversationId,
                                             @Param("userId") Long userId);
 }

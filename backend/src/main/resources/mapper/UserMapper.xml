@@ -36,12 +36,13 @@
 
     <!-- 根据关键字搜索用户 -->
     <select id="searchUsers" resultMap="UserResultMap">
-        SELECT * FROM `user`
+        SELECT id, email, nickname, avatar, bio, status, role, created_at
+        FROM `user`
         WHERE deleted = 0
-        AND id != #{excludeId}
-        AND (nickname LIKE CONCAT('%', #{keyword}, '%')
-             OR email LIKE CONCAT('%', #{keyword}, '%'))
+          AND (nickname LIKE CONCAT('%', #{keyword}, '%')
+            OR email LIKE CONCAT('%', #{keyword}, '%'))
         ORDER BY id DESC
+        LIMIT 50
     </select>
 
 </mapper>

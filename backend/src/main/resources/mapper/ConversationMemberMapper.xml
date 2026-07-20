@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chatvibe.module.chat.mapper.ConversationMemberMapper">
+
+    <resultMap id="ConversationResultMap" type="com.chatvibe.module.chat.entity.ConversationMember">
+        <id column="id" property="id"/>
+        <result column="conversation_id" property="conversationId"/>
+        <result column="user_id" property="userId"/>
+        <result column="role" property="role"/>
+        <result column="last_read_at" property="lastReadAt"/>
+        <result column="unread_count" property="unreadCount"/>
+        <result column="muted" property="muted"/>
+        <result column="pinned" property="pinned"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <!-- 恢复（取消逻辑删除）会话成员记录，并重置加入时间为当前时间。 -->
+    <update id="restoreMember">
+        UPDATE conversation_member
+        SET deleted = 0,
+            unread_count = 0,
+            last_read_at = NOW(),
+            created_at = NOW(),
+            updated_at = NOW()
+        WHERE conversation_id = #{conversationId}
+          AND user_id = #{userId}
+    </update>
+
+    <!-- 清空当前用户在指定会话中的聊天记录 -->
+    <update id="clearHistory">
+        UPDATE conversation_member
+        SET created_at = NOW(),
+            unread_count = 0,
+            last_read_at = NOW(),
+            updated_at = NOW()
+        WHERE conversation_id = #{conversationId}
+          AND user_id = #{userId}
+    </update>
+
+    <!-- 私聊场景：恢复已删除会话的成员记录（发送者除外） -->
+    <update id="restoreDeletedMembers">
+        UPDATE conversation_member
+        SET deleted = 0,
+            created_at = NOW(),
+            updated_at = NOW()
+        WHERE conversation_id = #{conversationId}
+          AND user_id != #{senderId}
+          AND deleted = 1
+    </update>
+
+    <!-- 群聊场景：恢复已删除会话的成员记录（仅限仍在群中的成员） -->
+    <update id="restoreDeletedGroupMembers">
+        UPDATE conversation_member cm
+            INNER JOIN group_member gm
+        ON gm.conversation_id = cm.conversation_id
+            AND gm.user_id = cm.user_id
+            AND gm.deleted = 0
+            SET cm.deleted = 0,
+                cm.created_at = NOW(),
+                cm.updated_at = NOW()
+        WHERE cm.conversation_id = #{conversationId}
+          AND cm.user_id != #{senderId}
+          AND cm.deleted = 1
+    </update>
+
+    <!-- 查询用户的好友ID列表（绕过逻辑删除） -->
+    <select id="selectFriendIdsIgnoreDeleted" resultType="java.lang.Long">
+        SELECT DISTINCT cm2.user_id
+        FROM conversation_member cm1
+                 INNER JOIN conversation c ON cm1.conversation_id = c.id
+                 INNER JOIN conversation_member cm2 ON cm2.conversation_id = c.id AND cm2.user_id != cm1.user_id
+        WHERE cm1.user_id = #{userId}
+          AND c.type = 1
+    </select>
+
+    <!-- 物理删除指定会话中两个用户的成员记录（彻底解除好友关系） -->
+    <delete id="physicalDeleteMembers">
+        DELETE FROM conversation_member
+        WHERE conversation_id = #{conversationId}
+          AND user_id IN (#{userIdA}, #{userIdB})
+    </delete>
+
+    <!-- 查询成员记录（绕过逻辑删除） -->
+    <select id="selectIgnoreDeleted" resultMap="ConversationResultMap">
+        SELECT *
+        FROM conversation_member
+        WHERE conversation_id = #{conversationId}
+          AND user_id = #{userId}
+    </select>
+
+</mapper>

@@ -86,6 +86,10 @@ resilience4j:
         limit-for-period: 10
         limit-refresh-period: 1h
         timeout-duration: 0
+      searchRateLimiter: # 新增：用户搜索限流
+        limit-for-period: 20
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService:
@@ -107,6 +111,15 @@ resilience4j:
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
       loginService: # 新增：登录通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+      searchService: # 新增：搜索熔断器
         register-health-indicator: true
         sliding-window-size: 10
         minimum-number-of-calls: 5

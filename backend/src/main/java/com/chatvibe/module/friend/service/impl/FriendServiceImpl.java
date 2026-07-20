@@ -197,13 +197,13 @@ public class FriendServiceImpl implements FriendService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteFriend(Long friendId) {
         Long userId = SecurityUtils.getCurrentUserId();
-        // 查找当前用户与好友之间的私聊会话 TODO:会话列表还未审核
+        // 查找当前用户与好友之间的私聊会话
         Conversation conversation = conversationMapper.selectPrivateConversation(userId, friendId);
         if (conversation == null) {
             throw new BusinessException(ResultCode.CONVERSATION_NOT_FOUND);
         }
         // 物理删除双向 conversation_member 记录（彻底解除好友关系）。
-        // 区别于删除会话的逻辑删除（仅隐藏列表、保留好友关系）：物理删除使记录彻底不存在，
+        // 区别于删除会话的逻辑删除（隐藏会话，清除聊天记录，保留好友关系）：物理删除使记录彻底不存在，
         // selectFriendIdsIgnoreDeleted（绕过 @TableLogic 的原生 SQL）将查不到该好友，
         // 从而保证删除好友后立即从"我的好友"列表消失，无法再次创建会话。
         conversationMemberMapper.physicalDeleteMembers(conversation.getId(), userId, friendId);
