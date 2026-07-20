@@ -39,10 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.Base64;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -342,6 +339,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
+    public List<UserVO> listByIdsIn(Collection<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return Collections.emptyList();
+        }
+        return baseMapper.selectByIdsIn(ids).stream()
+                .map(this::toVO)
+                .collect(Collectors.toList());
+    }
+    @Override
     @Cacheable(value = "userNotifyPrefs", key = "#userId")
     public NotificationPreferencesVO getNotificationPreferences(Long userId) {
         User user = getById(userId);
@@ -393,6 +399,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         evictUserInfoCache(userId);
         log.info("[用户] 通知偏好已更新: userId={}", userId);
     }
+
+
 
     /**
      * Integer 0/1 → Boolean，null 时返回默认值

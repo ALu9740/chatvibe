@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.chatvibe.module.friend.mapper.FriendRequestMapper">
+    <resultMap id="FriendRequestResultMap" type="com.chatvibe.module.friend.entity.FriendRequest">
+        <id column="id" property="id"/>
+        <result column="from_uid" property="fromUid"/>
+        <result column="to_uid" property="toUid"/>
+        <result column="message" property="message"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <select id="selectByIdsIn" resultMap="FriendRequestResultMap">
+        SELECT id, from_uid, to_uid, message, status, created_at
+        FROM friend_request
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+</mapper>

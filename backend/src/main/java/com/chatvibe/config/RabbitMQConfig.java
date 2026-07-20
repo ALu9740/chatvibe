@@ -36,6 +36,57 @@ public class RabbitMQConfig {
     public static final String CHAT_MESSAGE_QUEUE = "chat.message.push";
     public static final String CHAT_MESSAGE_ROUTING_KEY = "chat.message.#";
 
+    // 好友请求事件
+    public static final String FRIEND_REQUEST_QUEUE = "friend.request.event";
+    public static final String FRIEND_REQUEST_ROUTING_KEY = "friend.request.#";
+
+    // 好友接受事件
+    public static final String FRIEND_ACCEPT_QUEUE = "friend.accept.event";
+    public static final String FRIEND_ACCEPT_ROUTING_KEY = "friend.accept.#";
+
+    // 好友删除事件
+    public static final String FRIEND_DELETE_QUEUE = "friend.delete.event";
+    public static final String FRIEND_DELETE_ROUTING_KEY = "friend.delete.#";
+
+    /** 好友删除事件队列 */
+    @Bean
+    public Queue friendDeleteQueue() {
+        return QueueBuilder.durable(FRIEND_DELETE_QUEUE).build();
+    }
+
+    @Bean
+    public Binding friendDeleteBinding() {
+        return BindingBuilder.bind(friendDeleteQueue())
+                .to(chatExchange())
+                .with(FRIEND_DELETE_ROUTING_KEY);
+    }
+
+    /** 好友接受事件队列 */
+    @Bean
+    public Queue friendAcceptQueue() {
+        return QueueBuilder.durable(FRIEND_ACCEPT_QUEUE).build();
+    }
+
+    @Bean
+    public Binding friendAcceptBinding() {
+        return BindingBuilder.bind(friendAcceptQueue())
+                .to(chatExchange())
+                .with(FRIEND_ACCEPT_ROUTING_KEY);
+    }
+
+    /** 好友请求事件队列 */
+    @Bean
+    public Queue friendRequestQueue() {
+        return QueueBuilder.durable(FRIEND_REQUEST_QUEUE).build();
+    }
+
+    @Bean
+    public Binding friendRequestBinding() {
+        return BindingBuilder.bind(friendRequestQueue())
+                .to(chatExchange())
+                .with(FRIEND_REQUEST_ROUTING_KEY);
+    }
+
     /** 登出事件队列 */
     @Bean
     public Queue userLogoutQueue() {

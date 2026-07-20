@@ -62,37 +62,57 @@ chatvibe:
 resilience4j:
   ratelimiter:
     instances:
-      loginRateLimiter:
+      loginRateLimiter: # 登录限流
         limit-for-period: 10          # 每周期最多 10 次
         limit-refresh-period: 1s      # 1 秒一周期 → 10 QPS
         timeout-duration: 0           # 超限不等待，直接拒绝
-      resetPasswordRateLimiter: # 新增：重置密码限流
+      resetPasswordRateLimiter: # 重置密码限流
         limit-for-period: 5
         limit-refresh-period: 1m
         timeout-duration: 0
-      userInfoRateLimiter: # 新增：用户信息查询限流
+      userInfoRateLimiter: # 用户信息查询限流
         limit-for-period: 30
         limit-refresh-period: 1m
         timeout-duration: 0
-      changePasswordRateLimiter: # 新增：修改密码限流
+      changePasswordRateLimiter: # 修改密码限流
         limit-for-period: 5
         limit-refresh-period: 1h
         timeout-duration: 0
-      changeEmailRateLimiter: # 新增：更换邮箱限流
+      changeEmailRateLimiter: # 更换邮箱限流
         limit-for-period: 3
         limit-refresh-period: 1h
         timeout-duration: 0
-      uploadAvatarRateLimiter: # 新增：头像上传限流
+      uploadAvatarRateLimiter: # 头像上传限流
         limit-for-period: 10
         limit-refresh-period: 1h
         timeout-duration: 0
-      searchRateLimiter: # 新增：用户搜索限流
+      searchRateLimiter: # 用户搜索限流
         limit-for-period: 20
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      friendRequestRateLimiter: # 发送好友请求限流
+        limit-for-period: 10
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      friendListRateLimiter: # 好友列表限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      friendRequestListRateLimiter: # 好友请求列表限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      acceptRequestRateLimiter: # 接受/拒绝请求限流
+        limit-for-period: 20
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      deleteFriendRateLimiter: # 删除好友限流
+        limit-for-period: 10
         limit-refresh-period: 1m
         timeout-duration: 0
   circuitbreaker:
     instances:
-      aiService:
+      aiService: # AI 服务熔断器
         register-health-indicator: true
         sliding-window-size: 10              # 滑动窗口大小（最近10次请求）
         minimum-number-of-calls: 5           # 至少5次请求才开始计算失败率
@@ -101,7 +121,7 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3  # 半开状态允许3次试探
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
-      registerService: # 新增：注册流程熔断器
+      registerService: # 注册流程熔断器
         register-health-indicator: true
         sliding-window-size: 10
         minimum-number-of-calls: 5
@@ -110,7 +130,7 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
-      loginService: # 新增：登录通知消费熔断
+      loginService: # 登录通知消费熔断
         register-health-indicator: true
         sliding-window-size: 10
         minimum-number-of-calls: 5
@@ -119,7 +139,7 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
-      searchService: # 新增：搜索熔断器
+      searchService: # 搜索熔断器
         register-health-indicator: true
         sliding-window-size: 10
         minimum-number-of-calls: 5
@@ -128,5 +148,88 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      friendRequestService: # 好友请求熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      friendNotifyService: # 好友通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+      friendListService: # 好友列表熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+      acceptRequestService: # 接受请求熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      rejectRequestService: # 拒绝请求熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      friendAcceptNotifyService: # 接受请求的通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+      deleteFriendService: # 删除好友熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      friendDeleteNotifyService: # 删除好友通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+
 
 

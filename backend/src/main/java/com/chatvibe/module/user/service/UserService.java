@@ -8,6 +8,7 @@ import com.chatvibe.module.user.entity.User;
 import com.chatvibe.module.user.vo.NotificationPreferencesVO;
 import com.chatvibe.module.user.vo.UserVO;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -17,6 +18,14 @@ import java.util.List;
  * @date 2026-06-27
  */
 public interface UserService extends IService<User> {
+
+    /**
+     * 按ID批量转 VO
+     *
+     * @param ids 用户ID集合
+     * @return 用户 VO 列表
+     */
+    List<UserVO> listByIdsIn(Collection<Long> ids);
 
     /**
      * 获取指定用户的通知偏好（供内部调用，不依赖 SecurityContext）

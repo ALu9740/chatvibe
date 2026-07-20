@@ -17,6 +17,17 @@
         <result column="deleted" property="deleted"/>
     </resultMap>
 
+    <!-- 按ID批量查询用户(仅展示字段) -->
+    <select id="selectByIdsIn" resultMap="UserResultMap">
+        SELECT id, email, nickname, avatar, bio, status, role, created_at
+        FROM `user`
+        WHERE deleted = 0
+        AND id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
     <update id="incrLoginVersionAndSetOnline">
         UPDATE `user`
         SET login_version = IFNULL(login_version, 0) + 1, status = #{status}

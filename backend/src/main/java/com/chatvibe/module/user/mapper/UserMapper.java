@@ -5,6 +5,7 @@ import com.chatvibe.module.user.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -15,6 +16,14 @@ import java.util.List;
  */
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
+
+    /**
+     * 按ID批量查询用户(仅查询展示字段，排除 password 等敏感字段)
+     *
+     * @param ids 用户ID集合
+     * @return 用户列表
+     */
+    List<User> selectByIdsIn(@Param("ids") Collection<Long> ids);
 
     /**
      * 原子递增登录版本号并更新在线状态（避免读改写竞态）
