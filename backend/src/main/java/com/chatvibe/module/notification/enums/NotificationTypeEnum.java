@@ -18,7 +18,8 @@ public enum NotificationTypeEnum {
     FRIEND_DELETE(4, "好友删除"),
     GROUP_INVITE(5, "群邀请"),
     GROUP_REMOVE(6, "被移除群"),
-    GROUP_DISSOLVE(7, "群解散");
+    GROUP_DISSOLVE(7, "群解散"),
+    GROUP_TRANSFER(8, "群转让");
 
     private final Integer code;
     private final String description;

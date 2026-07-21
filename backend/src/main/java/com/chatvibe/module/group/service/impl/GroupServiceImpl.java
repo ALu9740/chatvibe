@@ -20,8 +20,7 @@ import com.chatvibe.module.chat.service.ChatService;
 import com.chatvibe.module.chat.vo.ConversationVO;
 import com.chatvibe.module.group.dto.CreateGroupDTO;
 import com.chatvibe.module.group.entity.GroupMember;
-import com.chatvibe.module.group.event.GroupInviteEvent;
-import com.chatvibe.module.group.event.GroupInviteEventProducer;
+import com.chatvibe.module.group.event.*;
 import com.chatvibe.module.group.mapper.GroupMemberMapper;
 import com.chatvibe.module.group.service.GroupService;
 import com.chatvibe.module.group.vo.GroupMemberVO;
@@ -46,10 +45,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -74,11 +71,16 @@ public class GroupServiceImpl implements GroupService {
     private final GroupInviteEventProducer groupInviteEventProducer;
     private final StringRedisTemplate stringRedisTemplate;
     private final CacheManager cacheManager;
+    private final GroupRemoveEventProducer groupRemoveEventProducer;
+    private final GroupDissolveEventProducer groupDissolveEventProducer;
+    private final GroupTransferEventProducer groupTransferEventProducer;
 
     /** 创建群组 Redis 锁前缀，防双击重复建群 */
     private static final String GROUP_CREATE_LOCK_PREFIX = "group:create:lock:";
     private static final Duration LOCK_TTL = Duration.ofSeconds(5);
     private static final String GROUP_DETAIL_CACHE = "groupDetail";
+    private static final String GROUP_MEMBERS_CACHE = "groupMembers";
+    private static final String GROUP_OPERATE_LOCK_PREFIX = "group:operate:lock:";
     /** 群组成员上限 */
     private static final int MAX_GROUP_MEMBERS = 200;
 
@@ -178,14 +180,21 @@ public class GroupServiceImpl implements GroupService {
     }
 
     @Override
+    @RateLimiter(name = "groupOperateRateLimiter", fallbackMethod = "groupOperateVoFallback")
+    @CircuitBreaker(name = "groupOperateService", fallbackMethod = "groupOperateVoFallback")
     @Transactional(rollbackFor = Exception.class)
     public ConversationVO updateGroup(Long groupId, String name, String avatar) {
         if (StrUtil.isBlank(name) && StrUtil.isBlank(avatar)) {
             throw new BusinessException(ResultCode.PARAM_INVALID);
         }
         Long userId = SecurityUtils.getCurrentUserId();
-        // 仅群主或管理员可编辑
         checkGroupOwnerOrAdmin(groupId, userId);
+        // Redis 锁防双击
+        String lockKey = GROUP_OPERATE_LOCK_PREFIX + "update:" + groupId;
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "请勿重复操作");
+        }
         LambdaUpdateWrapper<Conversation> wrapper = new LambdaUpdateWrapper<Conversation>()
                 .eq(Conversation::getId, groupId);
         if (name != null) {
@@ -201,22 +210,41 @@ public class GroupServiceImpl implements GroupService {
     }
 
     @Override
+    @RateLimiter(name = "groupMemberListRateLimiter", fallbackMethod = "groupMemberListFallback")
+    @CircuitBreaker(name = "groupMemberListService", fallbackMethod = "groupMemberListFallback")
     public List<GroupMemberVO> getGroupMembers(Long groupId) {
         Long userId = SecurityUtils.getCurrentUserId();
         if (!chatService.isMember(groupId, userId)) {
             throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
         }
-        // 查询群成员表（含群内角色）
+        // 1. 查 Caffeine 缓存
+        Cache cache = cacheManager.getCache(GROUP_MEMBERS_CACHE);
+        if (cache != null) {
+            Cache.ValueWrapper wrapper = cache.get(groupId);
+            if (wrapper != null && wrapper.get() != null) {
+                @SuppressWarnings("unchecked")
+                List<GroupMemberVO> cached = (List<GroupMemberVO>) wrapper.get();
+                if (cached != null) {
+                    return cached;
+                }
+            }
+        }
+        // 2. 缓存未命中：一次查群成员 + 一次批量查用户(消除 N+1)
         List<GroupMember> groupMembers = groupMemberMapper.selectList(
                 new LambdaQueryWrapper<GroupMember>()
                         .eq(GroupMember::getConversationId, groupId)
-                        .orderByDesc(GroupMember::getRole) // 群主(2)在前，成员(0)在后
+                        .orderByDesc(GroupMember::getRole)
                         .orderByAsc(GroupMember::getJoinTime));
-        return groupMembers.stream().map(gm -> {
-            User user = userService.getById(gm.getUserId());
-            if (user == null) {
-                return null;
-            }
+        if (groupMembers.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        Set<Long> userIds = groupMembers.stream().map(GroupMember::getUserId).collect(Collectors.toSet());
+        Map<Long, User> userMap = userService.listByIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity(), (a, b) -> a));
+        // 3. 内存组装 VO
+        List<GroupMemberVO> result = groupMembers.stream().map(gm -> {
+            User user = userMap.get(gm.getUserId());
+            if (user == null) return null;
             GroupMemberVO vo = new GroupMemberVO();
             vo.setId(user.getId());
             vo.setEmail(user.getEmail());
@@ -228,9 +256,16 @@ public class GroupServiceImpl implements GroupService {
             vo.setJoinTime(gm.getJoinTime());
             return vo;
         }).filter(vo -> vo != null).collect(Collectors.toList());
+        // 4. 回写缓存
+        if (cache != null) {
+            cache.put(groupId, result);
+        }
+        return result;
     }
 
     @Override
+    @RateLimiter(name = "groupOperateRateLimiter", fallbackMethod = "groupOperateFallback")
+    @CircuitBreaker(name = "groupOperateService", fallbackMethod = "groupOperateFallback")
     @Transactional(rollbackFor = Exception.class)
     public void inviteMembers(Long groupId, List<Long> memberIds) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -241,25 +276,25 @@ public class GroupServiceImpl implements GroupService {
         if (conversation == null || conversation.getType() != ConversationTypeEnum.TYPE_GROUP.getCode()) {
             throw new BusinessException(ResultCode.GROUP_NOT_FOUND);
         }
-        // 收集实际新加入的成员昵称（用于系统消息）
+        // Redis 锁防双击
+        String lockKey = GROUP_OPERATE_LOCK_PREFIX + "invite:" + groupId;
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "请勿重复操作");
+        }
+        // memberIds 去重
+        Set<Long> uniqueIds = new LinkedHashSet<>(memberIds);
         List<String> invitedNames = new ArrayList<>();
-        // 收集实际新加入的成员ID（用于通知）
         List<Long> invitedMemberIds = new ArrayList<>();
-        for (Long memberId : memberIds) {
-            // upsert 判断：用 selectIgnoreDeleted 绕过 @TableLogic，
-            // 避免「曾被移除/退出的成员」因 deleted=1 被 selectCount 误判为非成员，
-            // 进而在 insert 时违反 UNIQUE KEY uk_conv_user 导致 500 错误。
+        for (Long memberId : uniqueIds) {
             ConversationMember existCm = conversationMemberMapper.selectIgnoreDeleted(groupId, memberId);
             if (existCm != null && Integer.valueOf(0).equals(existCm.getDeleted())) {
-                // 已是活跃成员，跳过
                 continue;
             }
             invitedMemberIds.add(memberId);
             if (existCm != null) {
-                // 存在已逻辑删除的 conversation_member 记录，恢复
                 conversationMemberMapper.restoreMember(groupId, memberId);
             } else {
-                // 无记录，新建
                 ConversationMember cm = new ConversationMember();
                 cm.setConversationId(groupId);
                 cm.setUserId(memberId);
@@ -269,7 +304,6 @@ public class GroupServiceImpl implements GroupService {
                 cm.setLastReadAt(LocalDateTime.now());
                 conversationMemberMapper.insert(cm);
             }
-            // 同样处理 group_member（upsert，避免违反 uk_group_user）
             GroupMember existGm = groupMemberMapper.selectIgnoreDeleted(groupId, memberId);
             if (existGm != null) {
                 groupMemberMapper.restoreGroupMember(groupId, memberId);
@@ -281,10 +315,16 @@ public class GroupServiceImpl implements GroupService {
                 gm.setJoinTime(LocalDateTime.now());
                 groupMemberMapper.insert(gm);
             }
-            // 收集昵称
-            User invited = userService.getById(memberId);
-            if (invited != null && invited.getNickname() != null) {
-                invitedNames.add(invited.getNickname());
+        }
+        // 批量查昵称(消除 N+1)
+        if (!invitedMemberIds.isEmpty()) {
+            Map<Long, User> userMap = userService.listByIds(invitedMemberIds).stream()
+                    .collect(Collectors.toMap(User::getId, Function.identity(), (a, b) -> a));
+            for (Long mid : invitedMemberIds) {
+                User u = userMap.get(mid);
+                if (u != null && u.getNickname() != null) {
+                    invitedNames.add(u.getNickname());
+                }
             }
         }
         // 更新群成员数
@@ -295,9 +335,9 @@ public class GroupServiceImpl implements GroupService {
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getMemberCount, count == null ? 0 : count.intValue()));
         evictGroupDetailCache(groupId);
-        log.info("[群组] 邀请成员: groupId={}, invited={}", groupId, memberIds);
-
-        // 发送系统消息：邀请人昵称 邀请 被邀请人昵称 加入群聊
+        evictGroupMembersCache(groupId);
+        log.info("[群组] 邀请成员: groupId={}, invited={}", groupId, invitedMemberIds);
+        // 系统消息落库(事务内)
         if (!invitedNames.isEmpty()) {
             User inviter = userService.getById(userId);
             String inviterName = inviter != null ? inviter.getNickname() : "未知用户";
@@ -305,56 +345,62 @@ public class GroupServiceImpl implements GroupService {
             String sysContent = inviterName + " 邀请 " + joinNames + " 加入群聊";
             Message sysMsg = new Message();
             sysMsg.setConversationId(groupId);
-            sysMsg.setSenderId(0L); // 0 表示系统
+            sysMsg.setSenderId(0L);
             sysMsg.setType(MessageTypeEnum.TYPE_SYSTEM.getCode());
             sysMsg.setContent(sysContent);
             sysMsg.setStatus(0);
             messageMapper.insert(sysMsg);
-            // 更新会话最后消息
             conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                     .eq(Conversation::getId, groupId)
                     .set(Conversation::getLastMessage, sysContent)
                     .set(Conversation::getLastMessageAt, LocalDateTime.now()));
             evictGroupDetailCache(groupId);
-            // WebSocket 推送系统消息
             try {
                 messagingTemplate.convertAndSend("/topic/conversation." + groupId, sysMsg);
             } catch (Exception e) {
                 log.warn("[群组] 邀请系统消息推送失败: groupId={}, err={}", groupId, e.getMessage());
             }
         }
-        // 为每个被邀请的用户创建群邀请通知
-        User operator = userService.getById(userId);
-        String operatorName = operator != null ? operator.getNickname() : "未知用户";
-        String groupName = conversation.getName();
-        for (Long memberId : invitedMemberIds) {
-            String extra = new JSONObject()
-                    .set("conversationId", groupId)
-                    .set("groupName", groupName)
-                    .toString();
-            notificationService.createNotification(memberId, NotificationTypeEnum.GROUP_INVITE,
-                    "群邀请", operatorName + " 邀请你加入群聊 " + groupName, extra);
+        // 事务提交后异步发送群邀请通知(复用 GroupInviteEvent)
+        if (!invitedMemberIds.isEmpty()) {
+            User operator = userService.getById(userId);
+            String operatorName = operator != null ? operator.getNickname() : null;
+            List<Long> finalInvitedIds = new ArrayList<>(invitedMemberIds);
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            groupInviteEventProducer.sendGroupInviteEvent(
+                                    new GroupInviteEvent(groupId, userId, operatorName, conversation.getName(), finalInvitedIds)
+                            );
+                        }
+                    }
+            );
         }
     }
 
     @Override
+    @RateLimiter(name = "groupOperateRateLimiter", fallbackMethod = "groupOperateFallback")
+    @CircuitBreaker(name = "groupOperateService", fallbackMethod = "groupOperateFallback")
     @Transactional(rollbackFor = Exception.class)
     public void removeMember(Long groupId, Long userId) {
         Long operatorId = SecurityUtils.getCurrentUserId();
-        // 仅群主可移除成员
         checkGroupOwner(groupId, operatorId);
         if (operatorId.equals(userId)) {
             throw new BusinessException(ResultCode.PARAM_INVALID, "群主不能移除自己，请使用退出群组");
         }
-        // 删除 conversation_member
+        // Redis 锁防双击
+        String lockKey = GROUP_OPERATE_LOCK_PREFIX + "remove:" + groupId + ":" + userId;
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "请勿重复操作");
+        }
         conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, groupId)
                 .eq(ConversationMember::getUserId, userId));
-        // 删除 group_member
         groupMemberMapper.delete(new LambdaQueryWrapper<GroupMember>()
                 .eq(GroupMember::getConversationId, groupId)
                 .eq(GroupMember::getUserId, userId));
-        // 更新群成员数
         Long count = groupMemberMapper.selectCount(
                 new LambdaQueryWrapper<GroupMember>()
                         .eq(GroupMember::getConversationId, groupId)
@@ -363,19 +409,26 @@ public class GroupServiceImpl implements GroupService {
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getMemberCount, count));
         evictGroupDetailCache(groupId);
+        evictGroupMembersCache(groupId);
         log.info("[群组] 移除成员: groupId={}, userId={}", groupId, userId);
-        // 通知被移除的用户
+        // 事务提交后异步发送移除通知
         Conversation removedConv = conversationMapper.selectById(groupId);
         String removedGroupName = removedConv != null ? removedConv.getName() : "";
-        String extra = new JSONObject()
-                .set("conversationId", groupId)
-                .set("groupName", removedGroupName)
-                .toString();
-        notificationService.createNotification(userId, NotificationTypeEnum.GROUP_REMOVE,
-                "被移除群", "你已被移出群聊 " + removedGroupName, extra);
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        groupRemoveEventProducer.sendGroupRemoveEvent(
+                                new GroupRemoveEvent(groupId, userId, removedGroupName)
+                        );
+                    }
+                }
+        );
     }
 
     @Override
+    @RateLimiter(name = "groupOperateRateLimiter", fallbackMethod = "groupOperateFallback")
+    @CircuitBreaker(name = "groupOperateService", fallbackMethod = "groupOperateFallback")
     @Transactional(rollbackFor = Exception.class)
     public void leaveGroup(Long groupId) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -383,10 +436,15 @@ public class GroupServiceImpl implements GroupService {
         if (conversation == null || conversation.getType() != ConversationTypeEnum.TYPE_GROUP.getCode()) {
             throw new BusinessException(ResultCode.GROUP_NOT_FOUND);
         }
-        // 群主退出 = 直接解散群组（保留成员会话但禁言）
         if (conversation.getOwnerId() != null && conversation.getOwnerId().equals(userId)) {
             dissolveGroup(groupId);
             return;
+        }
+        // Redis 锁防双击
+        String lockKey = GROUP_OPERATE_LOCK_PREFIX + "leave:" + groupId + ":" + userId;
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "请勿重复操作");
         }
         conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, groupId)
@@ -394,7 +452,6 @@ public class GroupServiceImpl implements GroupService {
         groupMemberMapper.delete(new LambdaQueryWrapper<GroupMember>()
                 .eq(GroupMember::getConversationId, groupId)
                 .eq(GroupMember::getUserId, userId));
-        // 更新群成员数
         Long count = groupMemberMapper.selectCount(
                 new LambdaQueryWrapper<GroupMember>()
                         .eq(GroupMember::getConversationId, groupId)
@@ -403,10 +460,13 @@ public class GroupServiceImpl implements GroupService {
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getMemberCount, count));
         evictGroupDetailCache(groupId);
+        evictGroupMembersCache(groupId);
         log.info("[群组] 退出群组: groupId={}, userId={}", groupId, userId);
     }
 
     @Override
+    @RateLimiter(name = "groupOperateRateLimiter", fallbackMethod = "groupOperateFallback")
+    @CircuitBreaker(name = "groupOperateService", fallbackMethod = "groupOperateFallback")
     @Transactional(rollbackFor = Exception.class)
     public void transferOwner(Long groupId, Long newOwnerId) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
@@ -414,27 +474,29 @@ public class GroupServiceImpl implements GroupService {
         if (conversation == null || conversation.getType() != ConversationTypeEnum.TYPE_GROUP.getCode()) {
             throw new BusinessException(ResultCode.GROUP_NOT_FOUND);
         }
-        // 校验当前用户是否为群主
         if (conversation.getOwnerId() == null || !conversation.getOwnerId().equals(currentUserId)) {
             throw new BusinessException(ResultCode.NOT_GROUP_OWNER);
         }
-        // 不能转让给自己
         if (currentUserId.equals(newOwnerId)) {
             throw new BusinessException(ResultCode.PARAM_INVALID, "不能转让给自己");
         }
-        // 校验新群主是否为群成员
         GroupMember newOwner = groupMemberMapper.selectOne(new LambdaQueryWrapper<GroupMember>()
                 .eq(GroupMember::getConversationId, groupId)
                 .eq(GroupMember::getUserId, newOwnerId));
         if (newOwner == null) {
             throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
         }
-        // 更新 conversation.ownerId
+        // Redis 锁防双击
+        String lockKey = GROUP_OPERATE_LOCK_PREFIX + "transfer:" + groupId;
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "请勿重复操作");
+        }
         conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getOwnerId, newOwnerId));
         evictGroupDetailCache(groupId);
-        // 更新 group_member 表：原群主 role=0(成员)，新群主 role=2(群主)
+        evictGroupMembersCache(groupId); // role 变了，成员列表也要清
         groupMemberMapper.update(null, new LambdaUpdateWrapper<GroupMember>()
                 .eq(GroupMember::getConversationId, groupId)
                 .eq(GroupMember::getUserId, currentUserId)
@@ -443,7 +505,6 @@ public class GroupServiceImpl implements GroupService {
                 .eq(GroupMember::getConversationId, groupId)
                 .eq(GroupMember::getUserId, newOwnerId)
                 .set(GroupMember::getRole, GroupMember.ROLE_OWNER));
-        // 更新 conversation_member 表对应角色
         conversationMemberMapper.update(null, new LambdaUpdateWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, groupId)
                 .eq(ConversationMember::getUserId, currentUserId)
@@ -453,9 +514,23 @@ public class GroupServiceImpl implements GroupService {
                 .eq(ConversationMember::getUserId, newOwnerId)
                 .set(ConversationMember::getRole, ConversationMemberRoleEnum.ROLE_OWNER.getCode()));
         log.info("[群组] 转让群主: groupId={}, newOwnerId={}", groupId, newOwnerId);
+        // 事务提交后异步通知新群主
+        String groupName = conversation.getName();
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        groupTransferEventProducer.sendGroupTransferEvent(
+                                new GroupTransferEvent(groupId, newOwnerId, groupName)
+                        );
+                    }
+                }
+        );
     }
 
     @Override
+    @RateLimiter(name = "groupOperateRateLimiter", fallbackMethod = "groupOperateFallback")
+    @CircuitBreaker(name = "groupOperateService", fallbackMethod = "groupOperateFallback")
     @Transactional(rollbackFor = Exception.class)
     public void dissolveGroup(Long groupId) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
@@ -463,56 +538,66 @@ public class GroupServiceImpl implements GroupService {
         if (conversation == null || conversation.getType() != ConversationTypeEnum.TYPE_GROUP.getCode()) {
             throw new BusinessException(ResultCode.GROUP_NOT_FOUND);
         }
-        // 校验当前用户是群主
         if (conversation.getOwnerId() == null || !conversation.getOwnerId().equals(currentUserId)) {
             throw new BusinessException(ResultCode.NOT_GROUP_OWNER);
         }
-        // 1. 标记会话为已解散（不删除 conversation，让成员仍能看到会话）
+        // Redis 锁防双击
+        String lockKey = GROUP_OPERATE_LOCK_PREFIX + "dissolve:" + groupId;
+        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "请勿重复操作");
+        }
+        // 1. 标记会话为已解散
         conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getDissolved, 1)
                 .set(Conversation::getLastMessage, DISSOLVE_SYSTEM_MESSAGE)
                 .set(Conversation::getLastMessageAt, LocalDateTime.now()));
         evictGroupDetailCache(groupId);
-        // 1.5 通知所有群成员（排除群主自己）：群组已解散
+        evictGroupMembersCache(groupId);
+        // 2. 收集需要通知的成员(排除群主)
         String dissolveGroupName = conversation.getName();
         List<GroupMember> allMembers = groupMemberMapper.selectList(new LambdaQueryWrapper<GroupMember>()
                 .eq(GroupMember::getConversationId, groupId));
-        for (GroupMember gm : allMembers) {
-            if (!gm.getUserId().equals(currentUserId)) {
-                String dissolveExtra = new JSONObject()
-                        .set("conversationId", groupId)
-                        .set("groupName", dissolveGroupName)
-                        .toString();
-                notificationService.createNotification(gm.getUserId(), NotificationTypeEnum.GROUP_DISSOLVE,
-                        "群解散", "群聊 " + dissolveGroupName + " 已被群主解散", dissolveExtra);
-            }
-        }
-        // 2. 删除群主的 conversation_member 与 group_member 记录（群主会话列表立即清除）
+        List<Long> notifyMemberIds = allMembers.stream()
+                .map(GroupMember::getUserId)
+                .filter(uid -> !uid.equals(currentUserId))
+                .collect(Collectors.toList());
+        // 3. 删除群主的 member 记录
         conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, groupId)
                 .eq(ConversationMember::getUserId, currentUserId));
         groupMemberMapper.delete(new LambdaQueryWrapper<GroupMember>()
                 .eq(GroupMember::getConversationId, groupId)
                 .eq(GroupMember::getUserId, currentUserId));
-        // 3. 落库一条 SYSTEM 消息：群组已被解散
+        // 4. 落库系统消息
         Message sysMsg = new Message();
         sysMsg.setConversationId(groupId);
-        sysMsg.setSenderId(0L); // 0 表示系统
+        sysMsg.setSenderId(0L);
         sysMsg.setType(MessageTypeEnum.TYPE_SYSTEM.getCode());
         sysMsg.setContent(DISSOLVE_SYSTEM_MESSAGE);
         sysMsg.setStatus(0);
         messageMapper.insert(sysMsg);
-        // 4. WebSocket 广播系统消息 + 解散事件给所有成员
+        // 5. WebSocket 广播(保持事务内,需即时性)
         try {
             messagingTemplate.convertAndSend("/topic/conversation." + groupId, sysMsg);
-            // 额外广播一个 dissolved 事件，便于前端即时禁用输入框
             messagingTemplate.convertAndSend("/topic/conversation." + groupId,
                     java.util.Map.of("event", "dissolved", "conversationId", groupId, "message", DISSOLVE_SYSTEM_MESSAGE));
         } catch (Exception e) {
             log.warn("[群组] 解散广播失败: groupId={}, err={}", groupId, e.getMessage());
         }
         log.info("[群组] 群主解散群组: groupId={}, ownerId={}", groupId, currentUserId);
+        // 6. 事务提交后异步发送解散通知
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        groupDissolveEventProducer.sendGroupDissolveEvent(
+                                new GroupDissolveEvent(groupId, dissolveGroupName, notifyMemberIds)
+                        );
+                    }
+                }
+        );
     }
 
     /**
@@ -606,5 +691,52 @@ public class GroupServiceImpl implements GroupService {
         }
         log.warn("[熔断] 群详情降级: groupId={}, err={}", groupId, t.getMessage());
         throw new BusinessException(ResultCode.SYSTEM_ERROR, "服务暂不可用，请稍后重试");
+    }
+    /** 群写操作降级：限流 → 429；业务异常 → 透传；其他 → 系统错误 */
+    private void groupOperateFallback(Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[熔断] 群操作降级: err={}", t.getMessage());
+        throw new BusinessException(ResultCode.SYSTEM_ERROR, "服务暂不可用，请稍后重试");
+    }
+
+    /** 带 Long 参数的群写操作降级（用于单参数方法） */
+    private void groupOperateFallback(Long id, Throwable t) {
+        groupOperateFallback(t);
+    }
+
+    /** 带 Long+List 参数的群写操作降级（用于 inviteMembers） */
+    private void groupOperateFallback(Long id, List<Long> ids, Throwable t) {
+        groupOperateFallback(t);
+    }
+
+    /** 返回 ConversationVO 的群写操作降级（用于 updateGroup） */
+    private ConversationVO groupOperateVoFallback(Throwable t) {
+        groupOperateFallback(t);
+        return null; // 不会执行到，groupOperateFallback 内部已抛异常
+    }
+
+    /** 群成员列表降级：限流 → 429；熔断 → 空列表 */
+    private List<GroupMemberVO> groupMemberListFallback(Long groupId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[熔断] 群成员列表降级: groupId={}, err={}", groupId, t.getMessage());
+        return java.util.Collections.emptyList();
+    }
+
+    /** 清除群成员列表缓存 */
+    private void evictGroupMembersCache(Long groupId) {
+        Cache cache = cacheManager.getCache(GROUP_MEMBERS_CACHE);
+        if (cache != null) {
+            cache.evict(groupId);
+        }
     }
 }

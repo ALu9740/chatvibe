@@ -52,6 +52,43 @@ public class RabbitMQConfig {
     public static final String GROUP_INVITE_QUEUE = "group.invite.event";
     public static final String GROUP_INVITE_ROUTING_KEY = "group.invite.#";
 
+    // 群移除成员事件
+    public static final String GROUP_REMOVE_QUEUE = "group.remove.event";
+    public static final String GROUP_REMOVE_ROUTING_KEY = "group.remove.#";
+
+    // 群解散事件
+    public static final String GROUP_DISSOLVE_QUEUE = "group.dissolve.event";
+    public static final String GROUP_DISSOLVE_ROUTING_KEY = "group.dissolve.#";
+
+    // 群主转让事件
+    public static final String GROUP_TRANSFER_QUEUE = "group.transfer.event";
+    public static final String GROUP_TRANSFER_ROUTING_KEY = "group.transfer.#";
+
+    @Bean
+    public Queue groupRemoveQueue() {
+        return QueueBuilder.durable(GROUP_REMOVE_QUEUE).build();
+    }
+    @Bean
+    public Binding groupRemoveBinding() {
+        return BindingBuilder.bind(groupRemoveQueue()).to(chatExchange()).with(GROUP_REMOVE_ROUTING_KEY);
+    }
+    @Bean
+    public Queue groupDissolveQueue() {
+        return QueueBuilder.durable(GROUP_DISSOLVE_QUEUE).build();
+    }
+    @Bean
+    public Binding groupDissolveBinding() {
+        return BindingBuilder.bind(groupDissolveQueue()).to(chatExchange()).with(GROUP_DISSOLVE_ROUTING_KEY);
+    }
+    @Bean
+    public Queue groupTransferQueue() {
+        return QueueBuilder.durable(GROUP_TRANSFER_QUEUE).build();
+    }
+    @Bean
+    public Binding groupTransferBinding() {
+        return BindingBuilder.bind(groupTransferQueue()).to(chatExchange()).with(GROUP_TRANSFER_ROUTING_KEY);
+    }
+
     /** 群邀请事件队列 */
     @Bean
     public Queue groupInviteQueue() {

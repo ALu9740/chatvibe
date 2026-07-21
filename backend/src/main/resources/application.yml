@@ -118,6 +118,14 @@ resilience4j:
         limit-for-period: 30
         limit-refresh-period: 1m
         timeout-duration: 0
+      groupOperateRateLimiter: # 群写操作统一限流(编辑/邀请/移除/退出/转让/解散)
+        limit-for-period: 10
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      groupMemberListRateLimiter: # 群成员列表限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService: # AI 服务熔断器
@@ -269,5 +277,54 @@ resilience4j:
         sliding-window-type: COUNT_BASED
         ignore-exceptions:
           - com.chatvibe.common.exception.BusinessException
+      groupOperateService: # 群写操作统一熔断(编辑/邀请/移除/退出/转让/解散)
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      groupMemberListService: # 群成员列表熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      groupRemoveNotifyService: # 移除成员通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+      groupDissolveNotifyService: # 解散群通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+      groupTransferNotifyService: # 转让群主通知消费熔断
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
 
 

@@ -46,6 +46,11 @@ public class CacheConfig {
                 .maximumSize(500)
                 .recordStats()
                 .build());
+        cacheManager.registerCustomCache("groupMembers", Caffeine.newBuilder()
+                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .maximumSize(500)
+                .recordStats()
+                .build());
         return cacheManager;
     }
 
