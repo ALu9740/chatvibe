@@ -91,13 +91,27 @@ export function getGroupMembers(groupId: string | number) {
     .then((list) => (list || []).map(mapMember))
 }
 
-/** 创建群组（memberIds 字符串数组转数字数组以匹配后端 List<Long>） */
+/** 创建群组（avatar 传 base64 字符串，后端上传 MinIO） */
 export function createGroup(data: CreateGroupRequest) {
   const payload = {
     name: data.name,
+    avatar: data.avatar,
     memberIds: data.memberIds.map((id) => Number(id)).filter((n) => !isNaN(n))
   }
   return request.post<unknown, RawConversation>('/group', payload).then(mapGroup)
+}
+
+/** 上传群头像（base64 → MinIO，返回 URL） */
+export function uploadGroupAvatar(groupId: string | number, base64: string) {
+  return request.post<unknown, string>(`/group/${groupId}/avatar`, { base64 })
+}
+
+/** 编辑群信息（name 和 avatar 均可选，avatar 传已上传的 URL） */
+export function updateGroup(groupId: string | number, data: { name?: string; avatar?: string }) {
+  const params: string[] = []
+  if (data.name != null) params.push(`name=${encodeURIComponent(data.name)}`)
+  if (data.avatar != null) params.push(`avatar=${encodeURIComponent(data.avatar)}`)
+  return request.put<unknown, RawConversation>(`/group/${groupId}?${params.join('&')}`).then(mapGroup)
 }
 
 /** 退出群组 */

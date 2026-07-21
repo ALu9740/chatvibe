@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import * as authApi from '@/api/auth'
 import * as userApi from '@/api/user'
 import { getToken, setToken, removeToken } from '@/utils/request'
+import { resetNotify } from '@/utils/notify'
 import type { LoginRequest, User } from '@/types'
 
 /** 认证状态 store：管理 token 与用户信息 */
@@ -42,6 +43,8 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     user.value = null
     removeToken()
+    // 重置通知模块状态，使下次登录时 initNotify 重新拉取偏好
+    resetNotify()
   }
 
   /** 更新本地缓存的用户信息 */

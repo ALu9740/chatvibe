@@ -204,6 +204,7 @@ export interface Group {
 /** 创建群组请求 */
 export interface CreateGroupRequest {
   name: string
+  avatar?: string
   memberIds: string[]
 }
 

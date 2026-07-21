@@ -8,14 +8,13 @@ import {
   uploadAvatar,
   changePassword,
   changeEmail,
-  getNotificationPreferences,
   updateNotificationPreferences
 } from '@/api/user'
 import { sendCode } from '@/api/auth'
 import { getAvatarText, isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import { toast } from '@/utils/toast'
 import type { NotificationPreferences } from '@/types'
-import { updatePreferences } from '@/utils/notify'
+import { updatePreferences, getPreferences, readyNotify } from '@/utils/notify'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -55,16 +54,14 @@ async function toggleNotification(key: keyof NotificationPreferences) {
   }
 }
 
-// 加载通知偏好
+// 加载通知偏好（复用 notify.ts 模块缓存，避免与 App.vue 的 initNotify 重复请求后端）
 async function loadNotifications() {
-  try {
-    const data = await getNotificationPreferences()
-    notifications.desktop = data.desktop
-    notifications.sound = data.sound
-    notifications.aiAlert = data.aiAlert
-  } catch {
-    // 加载失败保持默认值
-  }
+  // 等待 App.vue 的 initNotify 完成，确保缓存已填充
+  await readyNotify()
+  const data = getPreferences()
+  notifications.desktop = data.desktop
+  notifications.sound = data.sound
+  notifications.aiAlert = data.aiAlert
 }
 
 onMounted(() => {
@@ -224,10 +221,14 @@ async function handleChangePassword() {
   savingPwd.value = true
   try {
     await changePassword(pwdForm.oldPassword, pwdForm.newPassword)
-    toast.success('密码修改成功', '请使用新密码重新登录其他设备')
     pwdForm.oldPassword = ''
     pwdForm.newPassword = ''
     pwdForm.newPassword2 = ''
+    toast.success('密码修改成功', '请使用新密码重新登录')
+    // 后端已在 changePassword 中递增 loginVersion 并置离线，旧 Token 立即失效。
+    // 无需再调登出接口（否则会因 Token 失效而报错），仅清理本地状态后跳转登录页。
+    authStore.logoutLocal()
+    router.push('/login')
   } finally {
     savingPwd.value = false
   }
