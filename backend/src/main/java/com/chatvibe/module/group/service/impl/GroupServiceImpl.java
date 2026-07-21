@@ -35,6 +35,8 @@ import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -71,10 +73,12 @@ public class GroupServiceImpl implements GroupService {
     private final NotificationService notificationService;
     private final GroupInviteEventProducer groupInviteEventProducer;
     private final StringRedisTemplate stringRedisTemplate;
+    private final CacheManager cacheManager;
 
     /** 创建群组 Redis 锁前缀，防双击重复建群 */
     private static final String GROUP_CREATE_LOCK_PREFIX = "group:create:lock:";
     private static final Duration LOCK_TTL = Duration.ofSeconds(5);
+    private static final String GROUP_DETAIL_CACHE = "groupDetail";
     /** 群组成员上限 */
     private static final int MAX_GROUP_MEMBERS = 200;
 
@@ -153,18 +157,21 @@ public class GroupServiceImpl implements GroupService {
         return vo;
     }
 
-
-
     @Override
+    @RateLimiter(name = "groupDetailRateLimiter", fallbackMethod = "getGroupDetailFallback")
+    @CircuitBreaker(name = "groupDetailService", fallbackMethod = "getGroupDetailFallback")
     public ConversationVO getGroupDetail(Long groupId) {
         Long userId = SecurityUtils.getCurrentUserId();
-        if (!chatService.isMember(groupId, userId)) {
-            throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
-        }
-        Conversation conversation = conversationMapper.selectById(groupId);
+        // 1. 先查群是否存在（优先走 Caffeine 缓存）
+        Conversation conversation = getCachedConversation(groupId);
         if (conversation == null || conversation.getType() != ConversationTypeEnum.TYPE_GROUP.getCode()) {
             throw new BusinessException(ResultCode.GROUP_NOT_FOUND);
         }
+        // 2. 再校验当前用户是否为群成员（权限检查，不缓存——用户维度太细）
+        if (!chatService.isMember(groupId, userId)) {
+            throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
+        }
+        // 3. 从缓存的 Conversation 组装 VO（0 次额外 DB 查询）
         ConversationVO vo = new ConversationVO();
         BeanUtil.copyProperties(conversation, vo);
         return vo;
@@ -188,6 +195,7 @@ public class GroupServiceImpl implements GroupService {
             wrapper.set(Conversation::getAvatar, avatar);
         }
         conversationMapper.update(null, wrapper);
+        evictGroupDetailCache(groupId);
         log.info("[群组] 编辑群信息: groupId={}", groupId);
         return getGroupDetail(groupId);
     }
@@ -286,6 +294,7 @@ public class GroupServiceImpl implements GroupService {
         conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getMemberCount, count == null ? 0 : count.intValue()));
+        evictGroupDetailCache(groupId);
         log.info("[群组] 邀请成员: groupId={}, invited={}", groupId, memberIds);
 
         // 发送系统消息：邀请人昵称 邀请 被邀请人昵称 加入群聊
@@ -306,6 +315,7 @@ public class GroupServiceImpl implements GroupService {
                     .eq(Conversation::getId, groupId)
                     .set(Conversation::getLastMessage, sysContent)
                     .set(Conversation::getLastMessageAt, LocalDateTime.now()));
+            evictGroupDetailCache(groupId);
             // WebSocket 推送系统消息
             try {
                 messagingTemplate.convertAndSend("/topic/conversation." + groupId, sysMsg);
@@ -352,6 +362,7 @@ public class GroupServiceImpl implements GroupService {
         conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getMemberCount, count));
+        evictGroupDetailCache(groupId);
         log.info("[群组] 移除成员: groupId={}, userId={}", groupId, userId);
         // 通知被移除的用户
         Conversation removedConv = conversationMapper.selectById(groupId);
@@ -391,6 +402,7 @@ public class GroupServiceImpl implements GroupService {
         conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getMemberCount, count));
+        evictGroupDetailCache(groupId);
         log.info("[群组] 退出群组: groupId={}, userId={}", groupId, userId);
     }
 
@@ -421,6 +433,7 @@ public class GroupServiceImpl implements GroupService {
         conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                 .eq(Conversation::getId, groupId)
                 .set(Conversation::getOwnerId, newOwnerId));
+        evictGroupDetailCache(groupId);
         // 更新 group_member 表：原群主 role=0(成员)，新群主 role=2(群主)
         groupMemberMapper.update(null, new LambdaUpdateWrapper<GroupMember>()
                 .eq(GroupMember::getConversationId, groupId)
@@ -460,6 +473,7 @@ public class GroupServiceImpl implements GroupService {
                 .set(Conversation::getDissolved, 1)
                 .set(Conversation::getLastMessage, DISSOLVE_SYSTEM_MESSAGE)
                 .set(Conversation::getLastMessageAt, LocalDateTime.now()));
+        evictGroupDetailCache(groupId);
         // 1.5 通知所有群成员（排除群主自己）：群组已解散
         String dissolveGroupName = conversation.getName();
         List<GroupMember> allMembers = groupMemberMapper.selectList(new LambdaQueryWrapper<GroupMember>()
@@ -541,6 +555,35 @@ public class GroupServiceImpl implements GroupService {
             groupMemberMapper.insert(gm);
         }
     }
+
+    /**
+     * 获取缓存的 Conversation（命中直接返回，未命中查库并回写）
+     */
+    private Conversation getCachedConversation(Long groupId) {
+        Cache cache = cacheManager.getCache(GROUP_DETAIL_CACHE);
+        if (cache != null) {
+            Cache.ValueWrapper wrapper = cache.get(groupId);
+            if (wrapper != null && wrapper.get() != null) {
+                return (Conversation) wrapper.get();
+            }
+        }
+        // 缓存未命中：查库
+        Conversation conversation = conversationMapper.selectById(groupId);
+        // 只缓存存在的会话（null 不缓存，避免缓存污染）
+        if (conversation != null && cache != null) {
+            cache.put(groupId, conversation);
+        }
+        return conversation;
+    }
+
+    /** 清除群详情缓存 */
+    private void evictGroupDetailCache(Long groupId) {
+        Cache cache = cacheManager.getCache(GROUP_DETAIL_CACHE);
+        if (cache != null) {
+            cache.evict(groupId);
+        }
+    }
+
     /** 建群降级：限流 → 429；业务异常 → 透传；其他 → 系统错误 */
     private ConversationVO createGroupFallback(CreateGroupDTO dto, Throwable t) {
         if (t instanceof RequestNotPermitted) {
@@ -550,6 +593,18 @@ public class GroupServiceImpl implements GroupService {
             throw (BusinessException) t;
         }
         log.warn("[熔断] 创建群组降级: err={}", t.getMessage());
+        throw new BusinessException(ResultCode.SYSTEM_ERROR, "服务暂不可用，请稍后重试");
+    }
+
+    /** 群详情降级：限流 → 429；熔断 → 系统错误 */
+    private ConversationVO getGroupDetailFallback(Long groupId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[熔断] 群详情降级: groupId={}, err={}", groupId, t.getMessage());
         throw new BusinessException(ResultCode.SYSTEM_ERROR, "服务暂不可用，请稍后重试");
     }
 }
