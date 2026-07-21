@@ -75,6 +75,13 @@ const confirmModalVisible = ref(false)
 
 const friendSearchKeyword = ref('')
 const groupName = ref('')
+const newGroupAvatar = ref<string>('') // 创建群组时的 base64 头像
+const groupAvatarInputRef = ref<HTMLInputElement | null>(null) // 创建群组头像文件选择
+const detailAvatarInputRef = ref<HTMLInputElement | null>(null) // 会话详情头像文件选择
+const avatarUploading = ref(false) // 头像上传中状态
+const editingGroupName = ref(false) // 群名编辑模式
+const tempGroupName = ref('') // 群名编辑临时值
+const groupNameEditRef = ref<HTMLInputElement | null>(null) // 群名编辑输入框引用
 const pickedMemberIds = ref<string[]>([])
 const invitePickedIds = ref<string[]>([])
 const pickableFriends = ref<Friend[]>([])
@@ -610,6 +617,7 @@ async function openGroupModal() {
   groupModalVisible.value = true
   groupModalTab.value = 'create'
   groupName.value = ''
+  newGroupAvatar.value = ''
   pickedMemberIds.value = []
   pickableFriends.value = await friendApi.getFriends()
   // 加载已有群聊（含已从本地列表移除的），按角色分类展示
@@ -657,11 +665,113 @@ async function handleCreateGroup() {
   }
   await groupApi.createGroup({
     name: groupName.value,
+    avatar: newGroupAvatar.value || undefined,
     memberIds: pickedMemberIds.value
   })
   toast.success('创建成功', `群组「${groupName.value}」已创建`)
   groupModalVisible.value = false
   chatStore.fetchConversations()
+}
+
+// === 群头像上传 ===
+
+/** 文件转 base64 */
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+/** 触发创建群组头像文件选择 */
+function triggerGroupAvatarUpload() {
+  groupAvatarInputRef.value?.click()
+}
+
+/** 创建群组头像选择回调 */
+async function handleGroupAvatarChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    toast.warning('头像过大', '请选择 2MB 以内的图片')
+    input.value = ''
+    return
+  }
+  newGroupAvatar.value = await fileToBase64(file)
+  input.value = ''
+}
+
+/** 触发会话详情面板群头像上传（仅群主/管理员） */
+function triggerDetailAvatarUpload() {
+  if (!isGroupOwner.value) return
+  detailAvatarInputRef.value?.click()
+}
+
+/** 会话详情面板群头像选择回调：上传 MinIO → 更新群信息 */
+async function handleDetailAvatarChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file || !currentConversation.value) return
+  if (file.size > 2 * 1024 * 1024) {
+    toast.warning('头像过大', '请选择 2MB 以内的图片')
+    input.value = ''
+    return
+  }
+  avatarUploading.value = true
+  try {
+    const base64 = await fileToBase64(file)
+    const url = await groupApi.uploadGroupAvatar(currentConversation.value.id, base64)
+    await groupApi.updateGroup(currentConversation.value.id, { avatar: url })
+    // 更新本地会话数据
+    currentConversation.value.avatar = url
+    chatStore.fetchConversations()
+    toast.success('头像更新成功')
+  } catch (err) {
+    console.error('[ChatView.handleDetailAvatarChange] 上传群头像失败:', err)
+    toast.error('上传失败', '请稍后重试')
+  } finally {
+    avatarUploading.value = false
+    input.value = ''
+  }
+}
+
+// === 群名编辑 ===
+
+/** 进入群名编辑模式 */
+function startEditGroupName() {
+  if (!currentConversation.value) return
+  tempGroupName.value = currentConversation.value.name
+  editingGroupName.value = true
+  nextTick(() => {
+    groupNameEditRef.value?.focus()
+    groupNameEditRef.value?.select()
+  })
+}
+
+/** 保存群名 */
+async function saveGroupName() {
+  if (!editingGroupName.value || !currentConversation.value) return
+  editingGroupName.value = false
+  const newName = tempGroupName.value.trim()
+  if (!newName || newName === currentConversation.value.name) return
+  try {
+    await groupApi.updateGroup(currentConversation.value.id, { name: newName })
+    currentConversation.value.name = newName
+    chatStore.fetchConversations()
+    toast.success('群名称已更新')
+  } catch (err) {
+    console.error('[ChatView.saveGroupName] 修改群名失败:', err)
+    toast.error('修改失败', '请稍后重试')
+  }
+}
+
+/** 取消群名编辑 */
+function cancelEditGroupName() {
+  editingGroupName.value = false
+  tempGroupName.value = ''
 }
 
 // === 邀请成员 ===
@@ -1057,13 +1167,44 @@ const themeIconName = computed(() => {
           <div class="detail-group-info">
             <div
               class="avatar size-xl"
-              :class="{ 'ai-avatar': currentConversation.isAI }"
+              :class="{ 'ai-avatar': currentConversation.isAI, 'avatar-clickable': isGroup && isGroupOwner }"
               :style="!currentConversation.isAI && !isAvatarUrl(currentConversation.avatar) && currentConversation.color ? { background: currentConversation.color } : {}"
+              @click="isGroup && isGroupOwner && triggerDetailAvatarUpload()"
             >
               <img v-if="isAvatarUrl(currentConversation.avatar)" :src="resolveUploadUrl(currentConversation.avatar)" alt="头像" />
               <template v-else>{{ currentConversation.avatar || getAvatarText(currentConversation.name) }}</template>
             </div>
-            <div class="group-name">{{ currentConversation.name }}</div>
+            <!-- 群名：群主可编辑 -->
+            <div v-if="isGroup && isGroupOwner && editingGroupName" class="group-name-edit">
+              <input
+                ref="groupNameEditRef"
+                v-model="tempGroupName"
+                class="input group-name-input"
+                maxlength="30"
+                @keyup.enter="saveGroupName"
+                @keyup.escape="cancelEditGroupName"
+                @blur="saveGroupName"
+              />
+            </div>
+            <div v-else class="group-name-row">
+              <div class="group-name">{{ currentConversation.name }}</div>
+              <button
+                v-if="isGroup && isGroupOwner"
+                class="group-name-edit-btn"
+                title="修改群名称"
+                @click="startEditGroupName"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+            </div>
+            <div v-if="avatarUploading" class="text-muted text-xs" style="margin-top: 2px">上传中...</div>
+            <input
+              ref="detailAvatarInputRef"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              style="display: none"
+              @change="handleDetailAvatarChange"
+            />
           </div>
         </div>
 
@@ -1348,6 +1489,26 @@ const themeIconName = computed(() => {
         <!-- Tab 1: 创建群组 -->
         <div v-if="groupModalTab === 'create'">
           <div class="form-group">
+            <label class="form-label">群头像</label>
+            <div class="group-avatar-upload" @click="triggerGroupAvatarUpload">
+              <div
+                class="avatar size-xl"
+                :style="!newGroupAvatar ? { background: '#2563EB' } : {}"
+              >
+                <img v-if="newGroupAvatar" :src="newGroupAvatar" alt="群头像" />
+                <template v-else>{{ groupName.trim() ? groupName.trim().charAt(0).toUpperCase() : '+' }}</template>
+              </div>
+              <div class="avatar-upload-hint">点击上传</div>
+            </div>
+            <input
+              ref="groupAvatarInputRef"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              style="display: none"
+              @change="handleGroupAvatarChange"
+            />
+          </div>
+          <div class="form-group">
             <label class="form-label">群名称</label>
             <input v-model="groupName" class="input" placeholder="为你的群组起个名字" />
           </div>
@@ -1556,6 +1717,65 @@ const themeIconName = computed(() => {
 .text-soft { color: var(--c-text-soft); }
 .text-sm { font-size: 13px; }
 .text-xs { font-size: 12px; }
+
+/* 群头像上传区域 */
+.group-avatar-upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.group-avatar-upload .avatar {
+  border: 2px dashed var(--c-border);
+  transition: border-color 0.2s;
+}
+.group-avatar-upload:hover .avatar {
+  border-color: var(--c-primary);
+}
+.avatar-upload-hint {
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+.avatar-clickable {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.avatar-clickable:hover {
+  opacity: 0.8;
+}
+.group-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.group-name-edit {
+  display: flex;
+  justify-content: center;
+}
+.group-name-edit-btn {
+  background: none;
+  border: none;
+  color: var(--c-text-muted);
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: color 0.2s, background 0.2s;
+}
+.group-name-edit-btn:hover {
+  color: var(--c-primary);
+  background: var(--c-bg-hover, rgba(0, 0, 0, 0.05));
+}
+.group-name-input {
+  width: 160px;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 4px 8px;
+}
 
 /* 消息时间分隔符：居中显示在消息上方 */
 .msg-time-divider {
