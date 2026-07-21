@@ -20,6 +20,8 @@ import com.chatvibe.module.chat.service.ChatService;
 import com.chatvibe.module.chat.vo.ConversationVO;
 import com.chatvibe.module.group.dto.CreateGroupDTO;
 import com.chatvibe.module.group.entity.GroupMember;
+import com.chatvibe.module.group.event.GroupInviteEvent;
+import com.chatvibe.module.group.event.GroupInviteEventProducer;
 import com.chatvibe.module.group.mapper.GroupMemberMapper;
 import com.chatvibe.module.group.service.GroupService;
 import com.chatvibe.module.group.vo.GroupMemberVO;
@@ -28,14 +30,24 @@ import com.chatvibe.module.notification.service.NotificationService;
 import com.chatvibe.module.user.entity.User;
 import com.chatvibe.module.user.service.UserService;
 import com.chatvibe.security.SecurityUtils;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -57,6 +69,14 @@ public class GroupServiceImpl implements GroupService {
     private final UserService userService;
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
+    private final GroupInviteEventProducer groupInviteEventProducer;
+    private final StringRedisTemplate stringRedisTemplate;
+
+    /** 创建群组 Redis 锁前缀，防双击重复建群 */
+    private static final String GROUP_CREATE_LOCK_PREFIX = "group:create:lock:";
+    private static final Duration LOCK_TTL = Duration.ofSeconds(5);
+    /** 群组成员上限 */
+    private static final int MAX_GROUP_MEMBERS = 200;
 
     /**
      * 系统消息：群组已被解散
@@ -64,37 +84,76 @@ public class GroupServiceImpl implements GroupService {
     private static final String DISSOLVE_SYSTEM_MESSAGE = "群组已被解散";
 
     @Override
+    @RateLimiter(name = "createGroupRateLimiter", fallbackMethod = "createGroupFallback")
+    @CircuitBreaker(name = "createGroupService", fallbackMethod = "createGroupFallback")
     @Transactional(rollbackFor = Exception.class)
     public ConversationVO createGroup(CreateGroupDTO dto) {
         Long ownerId = SecurityUtils.getCurrentUserId();
+        // 1. memberIds 去重 + 排除群主自身 + 排除空值
+        Set<Long> uniqueMemberIds = new LinkedHashSet<>();
+        for (Long mid : dto.getMemberIds()) {
+            if (mid != null && !mid.equals(ownerId)) {
+                uniqueMemberIds.add(mid);
+            }
+        }
+        if (uniqueMemberIds.size() + 1 > MAX_GROUP_MEMBERS) {
+            throw new BusinessException(ResultCode.PARAM_INVALID, "群组成员数量不能超过200人");
+        }
+        // 2. 批量校验被邀请用户是否存在（一次 IN 查询）
+        if (!uniqueMemberIds.isEmpty()) {
+            List<User> existUsers = userService.listByIds(new ArrayList<>(uniqueMemberIds));
+            if (existUsers.size() != uniqueMemberIds.size()) {
+                throw new BusinessException(ResultCode.USER_NOT_FOUND, "部分被邀请用户不存在");
+            }
+        }
+        // 3. Redis 锁：防止用户双击重复建群
+        String lockKey = GROUP_CREATE_LOCK_PREFIX + ownerId;
+        Boolean locked = stringRedisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "请勿重复操作");
+        }
+        // 4. 创建群组会话 + 写入成员
         Conversation conversation = chatService.createGroupConversation(
-                ownerId, dto.getName(), dto.getMemberIds());
-        // 设置群头像 TODO:前端未有上传群头像入口（暂不开发）
+                ownerId, dto.getName(), new ArrayList<>(uniqueMemberIds));
+        // 设置群头像
         if (dto.getAvatar() != null) {
             conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                     .eq(Conversation::getId, conversation.getId())
                     .set(Conversation::getAvatar, dto.getAvatar()));
+            conversation.setAvatar(dto.getAvatar());
         }
         // 同步写入 group_member 表
         syncGroupMembers(conversation.getId(), ownerId);
         log.info("[群组] 创建群组: groupId={}, name={}", conversation.getId(), dto.getName());
-        // 为每个被邀请成员发送群邀请通知（群主创建群组 = 邀请初始成员入群）
-        if (dto.getMemberIds() != null && !dto.getMemberIds().isEmpty()) {
+        // 5. 事务提交后异步发送群邀请通知事件
+        if (!uniqueMemberIds.isEmpty()) {
             User operator = userService.getById(ownerId);
-            String operatorName = operator != null ? operator.getNickname() : "未知用户";
-            String groupName = dto.getName();
-            for (Long memberId : dto.getMemberIds()) {
-                if (memberId.equals(ownerId)) continue;
-                String extra = new JSONObject()
-                        .set("conversationId", conversation.getId())
-                        .set("groupName", groupName)
-                        .toString();
-                notificationService.createNotification(memberId, NotificationTypeEnum.GROUP_INVITE,
-                        "群邀请", operatorName + " 邀请你加入群聊 " + groupName, extra);
-            }
+            String ownerNickname = operator != null ? operator.getNickname() : null;
+            TransactionSynchronizationManager.registerSynchronization(
+                    new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            groupInviteEventProducer.sendGroupInviteEvent(
+                                    new GroupInviteEvent(
+                                            conversation.getId(),
+                                            ownerId,
+                                            ownerNickname,
+                                            dto.getName(),
+                                            new ArrayList<>(uniqueMemberIds)
+                                    )
+                            );
+                        }
+                    }
+            );
         }
-        return getGroupDetail(conversation.getId());
+        // 6. 直接从内存对象组装 VO，省去 getGroupDetail 的 2 次 DB 查询
+        ConversationVO vo = new ConversationVO();
+        BeanUtil.copyProperties(conversation, vo);
+        return vo;
     }
+
+
 
     @Override
     public ConversationVO getGroupDetail(Long groupId) {
@@ -175,9 +234,9 @@ public class GroupServiceImpl implements GroupService {
             throw new BusinessException(ResultCode.GROUP_NOT_FOUND);
         }
         // 收集实际新加入的成员昵称（用于系统消息）
-        List<String> invitedNames = new java.util.ArrayList<>();
+        List<String> invitedNames = new ArrayList<>();
         // 收集实际新加入的成员ID（用于通知）
-        List<Long> invitedMemberIds = new java.util.ArrayList<>();
+        List<Long> invitedMemberIds = new ArrayList<>();
         for (Long memberId : memberIds) {
             // upsert 判断：用 selectIgnoreDeleted 绕过 @TableLogic，
             // 避免「曾被移除/退出的成员」因 deleted=1 被 selectCount 误判为非成员，
@@ -481,5 +540,16 @@ public class GroupServiceImpl implements GroupService {
             gm.setJoinTime(LocalDateTime.now());
             groupMemberMapper.insert(gm);
         }
+    }
+    /** 建群降级：限流 → 429；业务异常 → 透传；其他 → 系统错误 */
+    private ConversationVO createGroupFallback(CreateGroupDTO dto, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[熔断] 创建群组降级: err={}", t.getMessage());
+        throw new BusinessException(ResultCode.SYSTEM_ERROR, "服务暂不可用，请稍后重试");
     }
 }

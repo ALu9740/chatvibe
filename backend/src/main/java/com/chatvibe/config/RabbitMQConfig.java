@@ -48,6 +48,23 @@ public class RabbitMQConfig {
     public static final String FRIEND_DELETE_QUEUE = "friend.delete.event";
     public static final String FRIEND_DELETE_ROUTING_KEY = "friend.delete.#";
 
+    // 群邀请事件
+    public static final String GROUP_INVITE_QUEUE = "group.invite.event";
+    public static final String GROUP_INVITE_ROUTING_KEY = "group.invite.#";
+
+    /** 群邀请事件队列 */
+    @Bean
+    public Queue groupInviteQueue() {
+        return QueueBuilder.durable(GROUP_INVITE_QUEUE).build();
+    }
+
+    @Bean
+    public Binding groupInviteBinding() {
+        return BindingBuilder.bind(groupInviteQueue())
+                .to(chatExchange())
+                .with(GROUP_INVITE_ROUTING_KEY);
+    }
+
     /** 好友删除事件队列 */
     @Bean
     public Queue friendDeleteQueue() {

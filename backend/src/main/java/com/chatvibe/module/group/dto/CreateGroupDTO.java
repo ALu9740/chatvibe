@@ -21,6 +21,7 @@ public class CreateGroupDTO {
     private String name;
 
     @NotEmpty(message = "成员列表不能为空")
+    @Size(max = 200, message = "成员列表最多不能超过200人")
     private List<Long> memberIds;
 
     /**
