@@ -41,6 +41,15 @@ public interface GroupService {
     ConversationVO updateGroup(Long groupId, String name, String avatar);
 
     /**
+     * 上传群头像（base64 → MinIO，返回 URL）
+     *
+     * @param groupId 群组ID
+     * @param base64  图片 base64 数据
+     * @return 头像访问 URL
+     */
+    String uploadGroupAvatar(Long groupId, String base64);
+
+    /**
      * 获取群成员列表（含群内角色）
      */
     List<GroupMemberVO> getGroupMembers(Long groupId);

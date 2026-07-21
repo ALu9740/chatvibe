@@ -1,6 +1,7 @@
 package com.chatvibe.module.group.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -18,6 +19,7 @@ import com.chatvibe.module.chat.mapper.ConversationMemberMapper;
 import com.chatvibe.module.chat.mapper.MessageMapper;
 import com.chatvibe.module.chat.service.ChatService;
 import com.chatvibe.module.chat.vo.ConversationVO;
+import com.chatvibe.module.file.service.FileStorageService;
 import com.chatvibe.module.group.dto.CreateGroupDTO;
 import com.chatvibe.module.group.entity.GroupMember;
 import com.chatvibe.module.group.event.*;
@@ -44,7 +46,9 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -74,6 +78,7 @@ public class GroupServiceImpl implements GroupService {
     private final GroupRemoveEventProducer groupRemoveEventProducer;
     private final GroupDissolveEventProducer groupDissolveEventProducer;
     private final GroupTransferEventProducer groupTransferEventProducer;
+    private final FileStorageService fileStorageService;
 
     /** 创建群组 Redis 锁前缀，防双击重复建群 */
     private static final String GROUP_CREATE_LOCK_PREFIX = "group:create:lock:";
@@ -122,12 +127,20 @@ public class GroupServiceImpl implements GroupService {
         // 4. 创建群组会话 + 写入成员
         Conversation conversation = chatService.createGroupConversation(
                 ownerId, dto.getName(), new ArrayList<>(uniqueMemberIds));
-        // 设置群头像
+        /*// 设置群头像
         if (dto.getAvatar() != null) {
             conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                     .eq(Conversation::getId, conversation.getId())
                     .set(Conversation::getAvatar, dto.getAvatar()));
             conversation.setAvatar(dto.getAvatar());
+        }*/
+        // 设置群头像：DTO 传的是 base64，上传 MinIO 转为 URL
+        if (StrUtil.isNotBlank(dto.getAvatar())) {
+            String avatarUrl = uploadToMinIO(dto.getAvatar());
+            conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
+                    .eq(Conversation::getId, conversation.getId())
+                    .set(Conversation::getAvatar, avatarUrl));
+            conversation.setAvatar(avatarUrl);
         }
         // 同步写入 group_member 表
         syncGroupMembers(conversation.getId(), ownerId);
@@ -600,6 +613,53 @@ public class GroupServiceImpl implements GroupService {
         );
     }
 
+    @Override
+    @RateLimiter(name = "uploadGroupAvatarRateLimiter", fallbackMethod = "uploadGroupAvatarFallback")
+    public String uploadGroupAvatar(Long groupId, String base64) {
+        Long userId = SecurityUtils.getCurrentUserId();
+        checkGroupOwnerOrAdmin(groupId, userId);
+        if (StrUtil.isBlank(base64)) {
+            throw new BusinessException(ResultCode.PARAM_INVALID, "头像数据不能为空");
+        }
+        // 去除 data URI 前缀: data:image/png;base64,xxxx
+        String data = base64;
+        String ext = "png";
+        int commaIdx = base64.indexOf(',');
+        if (commaIdx > 0 && base64.startsWith("data:")) {
+            String header = base64.substring(0, commaIdx);
+            data = base64.substring(commaIdx + 1);
+            if (header.contains("image/jpeg") || header.contains("image/jpg")) {
+                ext = "jpg";
+            } else if (header.contains("image/gif")) {
+                ext = "gif";
+            } else if (header.contains("image/webp")) {
+                ext = "webp";
+            }
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(data);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ResultCode.PARAM_INVALID, "头像 base64 解码失败");
+        }
+        if (bytes.length > 2 * 1024 * 1024) {
+            throw new BusinessException(ResultCode.PARAM_INVALID, "头像大小不能超过 2MB");
+        }
+        // 上传到 MinIO
+        String monthDir = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        String subDir = "group_avatar/" + monthDir;
+        String uuid = IdUtil.fastSimpleUUID();
+        String savedName = uuid + "." + ext;
+        String contentType = "image/" + ext;
+        String url = fileStorageService.upload(bytes, subDir, savedName, contentType);
+        log.info("[群组] 头像上传成功: groupId={}, url={}", groupId, url);
+        return url;
+    }
+
+    /** 群头像上传限流降级 */
+    private String uploadGroupAvatarFallback(Long groupId, String base64, Throwable t) {
+        throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+    }
     /**
      * 校验当前用户是否为群主
      */
@@ -639,6 +699,38 @@ public class GroupServiceImpl implements GroupService {
             gm.setJoinTime(LocalDateTime.now());
             groupMemberMapper.insert(gm);
         }
+    }
+
+    /**
+     * base64 图片上传到 MinIO（内部复用，无权限校验）
+     */
+    private String uploadToMinIO(String base64) {
+        String data = base64;
+        String ext = "png";
+        int commaIdx = base64.indexOf(',');
+        if (commaIdx > 0 && base64.startsWith("data:")) {
+            String header = base64.substring(0, commaIdx);
+            data = base64.substring(commaIdx + 1);
+            if (header.contains("image/jpeg") || header.contains("image/jpg")) {
+                ext = "jpg";
+            } else if (header.contains("image/gif")) {
+                ext = "gif";
+            } else if (header.contains("image/webp")) {
+                ext = "webp";
+            }
+        }
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(data);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(ResultCode.PARAM_INVALID, "头像 base64 解码失败");
+        }
+        String monthDir = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
+        String subDir = "group_avatar/" + monthDir;
+        String uuid = IdUtil.fastSimpleUUID();
+        String savedName = uuid + "." + ext;
+        String contentType = "image/" + ext;
+        return fileStorageService.upload(bytes, subDir, savedName, contentType);
     }
 
     /**

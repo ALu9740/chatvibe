@@ -51,6 +51,16 @@ public class GroupController {
     }
 
     /**
+     * 上传群头像（base64 → MinIO）
+     */
+    @PostMapping("/{groupId}/avatar")
+    public Result<String> uploadGroupAvatar(@PathVariable Long groupId,
+                                            @RequestBody java.util.Map<String, String> body) {
+        String base64 = body.get("base64");
+        return Result.success(groupService.uploadGroupAvatar(groupId, base64));
+    }
+
+    /**
      * 获取群成员列表（含群内角色）
      */
     @GetMapping("/{groupId}/members")

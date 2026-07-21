@@ -126,6 +126,10 @@ resilience4j:
         limit-for-period: 30
         limit-refresh-period: 1m
         timeout-duration: 0
+      uploadGroupAvatarRateLimiter: # 群头像上传限流
+        limit-for-period: 10
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService: # AI 服务熔断器
