@@ -25,6 +25,9 @@ import com.chatvibe.module.group.mapper.GroupMemberMapper;
 import com.chatvibe.module.user.entity.User;
 import com.chatvibe.module.user.service.UserService;
 import com.chatvibe.security.SecurityUtils;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.ratelimiter.RequestNotPermitted;
+import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -33,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -52,14 +56,17 @@ public class ChatServiceImpl implements ChatService {
     private final MessageHiddenMapper messageHiddenMapper;
     private final GroupMemberMapper groupMemberMapper;
     private final UserService userService;
-    private final SimpMessagingTemplate messagingTemplate;
     private final MessageEventProducer messageEventProducer;
 
     @Override
+    @RateLimiter(name = "conversationListRateLimiter", fallbackMethod = "getConversationListFallback")
+    @CircuitBreaker(name = "conversationListService", fallbackMethod = "getConversationListFallback")
     public List<ConversationVO> getConversationList() {
         Long userId = SecurityUtils.getCurrentUserId();
         return conversationMapper.selectConversationsByUserId(userId);
     }
+
+
 
     @Override
     public List<Message> getHistoryMessages(Long conversationId, Long lastId, int size) {
@@ -513,5 +520,14 @@ public class ChatServiceImpl implements ChatService {
         member.setMuted(ConversationMemberMutedEnum.MUTE_NO.getCode());
         member.setLastReadAt(LocalDateTime.now());
         conversationMemberMapper.insert(member);
+    }
+
+    /** 会话列表降级：限流 → 429；熔断 → 空列表保前端可用 */
+    private List<ConversationVO> getConversationListFallback(Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        log.warn("[聊天] 会话列表熔断降级: err={}", t.getMessage());
+        return Collections.emptyList();
     }
 }

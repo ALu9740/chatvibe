@@ -19,35 +19,13 @@
     </resultMap>
 
     <!-- 查询用户参与的会话列表(带未读数和最后消息) -->
-    <!-- 私聊会话(type=1)动态获取对方的昵称、头像和用户ID -->
+    <!-- 私聊会话(type=1)通过 LEFT JOIN 一次性关联对方用户，消除 4 个关联子查询 -->
     <select id="selectConversationsByUserId" resultType="com.chatvibe.module.chat.vo.ConversationVO">
         SELECT
             c.id AS id,
-            CASE
-                WHEN c.type = 1 THEN (
-                    SELECT u.nickname
-                    FROM conversation_member cm2
-                    INNER JOIN user u ON cm2.user_id = u.id
-                    WHERE cm2.conversation_id = c.id
-                      AND cm2.user_id != #{userId}
-                      AND u.deleted = 0
-                    LIMIT 1
-                )
-                ELSE c.name
-            END AS name,
+            CASE WHEN c.type = 1 THEN peer.nickname ELSE c.name END AS name,
             c.type AS type,
-            CASE
-                WHEN c.type = 1 THEN (
-                    SELECT u.avatar
-                    FROM conversation_member cm2
-                    INNER JOIN user u ON cm2.user_id = u.id
-                    WHERE cm2.conversation_id = c.id
-                      AND cm2.user_id != #{userId}
-                      AND u.deleted = 0
-                    LIMIT 1
-                )
-                ELSE c.avatar
-            END AS avatar,
+            CASE WHEN c.type = 1 THEN peer.avatar ELSE c.avatar END AS avatar,
             c.owner_id AS ownerId,
             c.last_message AS lastMessage,
             c.last_message_at AS lastMessageAt,
@@ -59,35 +37,24 @@
             cm.muted AS muted,
             cm.pinned AS pinned,
             c.created_at AS createdAt,
-            CASE
-                WHEN c.type = 1 THEN (
-                    SELECT cm2.user_id
-                    FROM conversation_member cm2
-                    WHERE cm2.conversation_id = c.id
-                      AND cm2.user_id != #{userId}
-                    LIMIT 1
-                )
-                ELSE NULL
-            END AS peerId,
-            CASE
-                WHEN c.type = 1 THEN (
-                    SELECT u.status
-                    FROM conversation_member cm2
-                    INNER JOIN user u ON cm2.user_id = u.id
-                    WHERE cm2.conversation_id = c.id
-                      AND cm2.user_id != #{userId}
-                      AND u.deleted = 0
-                    LIMIT 1
-                )
-                ELSE NULL
-            END AS peerStatus,
+            CASE WHEN c.type = 1 THEN peer_cm.user_id ELSE NULL END AS peerId,
+            CASE WHEN c.type = 1 THEN peer.status ELSE NULL END AS peerStatus,
             cm.role AS myRole
         FROM conversation c
-        INNER JOIN conversation_member cm ON c.id = cm.conversation_id
-        WHERE cm.user_id = #{userId}
-          AND c.deleted = 0
-          AND cm.deleted = 0
-        ORDER BY c.last_message_at DESC, c.updated_at DESC
+                 INNER JOIN conversation_member cm
+                            ON c.id = cm.conversation_id
+                                AND cm.user_id = #{userId}
+                                AND cm.deleted = 0
+                 LEFT JOIN conversation_member peer_cm
+                           ON c.id = peer_cm.conversation_id
+                               AND peer_cm.user_id != #{userId}
+            AND peer_cm.deleted = 0
+            LEFT JOIN user peer
+        ON peer_cm.user_id = peer.id
+            AND peer.deleted = 0
+        WHERE c.deleted = 0
+        ORDER BY cm.pinned DESC, c.last_message_at DESC, c.updated_at DESC
+            LIMIT 200
     </select>
 
     <!-- 查询私聊会话(两用户之间，要求双方成员均未删除) -->

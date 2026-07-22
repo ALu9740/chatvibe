@@ -130,6 +130,10 @@ resilience4j:
         limit-for-period: 10
         limit-refresh-period: 1m
         timeout-duration: 0
+      conversationListRateLimiter: # 会话列表限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService: # AI 服务熔断器
@@ -330,5 +334,13 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
-
+      conversationListService: # 会话列表熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
 
