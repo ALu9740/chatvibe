@@ -33,6 +33,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -84,7 +86,26 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Message sendMessage(SendMessageDTO dto) {
-        return sendMessage(dto, SecurityUtils.getCurrentUserId());
+        Message message = sendMessage(dto, SecurityUtils.getCurrentUserId());
+        // REST 路径：事务提交后通过 MQ 广播给其他客户端（WebSocket 路径由 Handler 直接广播，不走 MQ）
+        final MessageEvent event = new MessageEvent();
+        event.setMessageId(message.getId());
+        event.setConversationId(message.getConversationId());
+        event.setSenderId(message.getSenderId());
+        event.setSenderName(message.getSenderName());
+        event.setSenderAvatar(message.getSenderAvatar());
+        event.setType(message.getType());
+        event.setContent(message.getContent());
+        event.setExtra(message.getExtra());
+        event.setStatus(message.getStatus());
+        event.setCreatedAt(System.currentTimeMillis());
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                messageEventProducer.sendPushEvent(event);
+            }
+        });
+        return message;
     }
 
     @Override
@@ -140,27 +161,21 @@ public class ChatServiceImpl implements ChatService {
             message.setSenderAvatar(sender.getAvatar());
         }
 
-        // 通过 RabbitMQ 异步推送 WebSocket 消息
-        MessageEvent event = new MessageEvent();
-        event.setMessageId(message.getId());
-        event.setConversationId(dto.getConversationId());
-        event.setSenderId(userId);
-        event.setSenderName(message.getSenderName());
-        event.setSenderAvatar(message.getSenderAvatar());
-        event.setType(message.getType());
-        event.setContent(message.getContent());
-        event.setExtra(message.getExtra());
-        event.setStatus(message.getStatus());
-        event.setCreatedAt(System.currentTimeMillis());
-        messageEventProducer.sendPushEvent(event);
-
+        // 注意：广播由调用方负责
+        // - WebSocket 路径: ChatWebSocketHandler 直接通过 SimpMessagingTemplate 广播
+        // - REST 路径: sendMessage(dto) 通过 MQ afterCommit 广播
         return message;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void markAsRead(Long conversationId) {
-        Long userId = SecurityUtils.getCurrentUserId();
+        markAsRead(conversationId, SecurityUtils.getCurrentUserId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void markAsRead(Long conversationId, Long userId) {
         if (!isMember(conversationId, userId)) {
             throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
         }

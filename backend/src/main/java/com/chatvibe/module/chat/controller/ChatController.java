@@ -48,7 +48,7 @@ public class ChatController {
     }
 
     /**
-     * 发送消息(REST 备用接口，主要走 WebSocket)
+     * 发送消息
      */
     @PostMapping("/message")
     public Result<Message> sendMessage(@Valid @RequestBody SendMessageDTO dto) {

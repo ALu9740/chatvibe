@@ -54,6 +54,14 @@ public interface ChatService {
     void markAsRead(Long conversationId);
 
     /**
+     * 标记会话已读（指定用户ID, 供 WebSocket 上下文使用）
+     *
+     * @param conversationId 会话ID
+     * @param userId         用户ID
+     */
+    void markAsRead(Long conversationId, Long userId);
+
+    /**
      * 切换会话消息免打扰状态（当前用户维度）
      *
      * @param conversationId 会话ID
