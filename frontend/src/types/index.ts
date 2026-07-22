@@ -136,6 +136,8 @@ export interface Message {
   time: string
   /** 是否正在流式输出（AI） */
   streaming?: boolean
+  /** 发送状态：sending(发送中) | sent(已送达) | failed(发送失败) */
+  sendStatus?: 'sending' | 'sent' | 'failed'
 }
 
 /** 发送消息请求 */

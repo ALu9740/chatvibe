@@ -303,6 +303,12 @@ async function handleAiReply(conv: Conversation, fullContent: string, mentionAI:
   scrollToBottom()
 }
 
+// 重试发送失败的消息
+async function handleRetryMessage(payload: { message: Message }) {
+  await chatStore.retrySendMessage(payload.message)
+  scrollToBottom()
+}
+
 // 滚动到底部
 function scrollToBottom() {
   nextTick(() => {
@@ -1121,6 +1127,7 @@ const themeIconName = computed(() => {
                 :message="msg"
                 :show-avatar="isGroup || msg.sender === 'ai'"
                 @contextmenu="onMessageContextmenu"
+                @retry="handleRetryMessage"
               />
             </template>
             <!-- <div v-if="currentMessages.length === 0" class="text-center text-muted" style="padding: 60px 12px">

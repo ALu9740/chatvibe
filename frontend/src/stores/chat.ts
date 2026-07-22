@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as chatApi from '@/api/chat'
 import { useAuthStore } from '@/stores/auth'
+import { isWsConnected, wsSendMessage, wsSendReadReceipt } from '@/composables/useWebSocket'
 import type {
   Conversation,
   ConversationType,
@@ -216,8 +217,12 @@ export const useChatStore = defineStore('chat', () => {
     if (!messageMap.value[conversationId]) {
       await fetchMessages(conversationId)
     }
-    // 通知后端已读
-    await chatApi.markRead(conversationId)
+    // 通知后端已读（WebSocket 优先，REST 降级）
+    if (isWsConnected()) {
+      wsSendReadReceipt(conversationId)
+    } else {
+      await chatApi.markRead(conversationId)
+    }
   }
 
   /** 拉取某个会话的历史消息（初始加载，获取最新一页） */
@@ -263,15 +268,18 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
-  /** 发送消息（乐观更新） */
+  /** 发送消息（乐观更新，WebSocket 优先，REST 降级） */
   async function sendMessage(payload: SendMessageRequest): Promise<void> {
+    const tempId = generateId('m')
     const tempMessage: Message = {
-      id: generateId('m'),
+      id: tempId,
       conversationId: payload.conversationId,
       sender: 'self',
       type: payload.type,
       content: payload.content,
-      time: new Date().toISOString()
+      extra: payload.extra,
+      time: new Date().toISOString(),
+      sendStatus: 'sending'
     }
     // 立即插入到消息列表
     if (!messageMap.value[payload.conversationId]) {
@@ -281,12 +289,112 @@ export const useChatStore = defineStore('chat', () => {
     // 更新会话最后一条消息预览
     updateLastMessage(payload.conversationId, buildPreviewText(payload.type, payload.content, payload.extra), typeToInt(payload.type))
 
-    const real = (await chatApi.sendMessage(payload)) as unknown as RawMessage
-    const mapped = mapMessage(real, authStore.user?.id)
-    // 用真实消息替换临时消息
-    const list = messageMap.value[payload.conversationId]
-    const idx = list.findIndex((m) => m.id === tempMessage.id)
-    if (idx !== -1) list[idx] = mapped
+    // 构建 WebSocket / REST 共用的 payload
+    const extra = payload.extra
+      ? payload.mentionAI
+        ? JSON.stringify({ ...JSON.parse(payload.extra), mentionAI: true })
+        : payload.extra
+      : payload.mentionAI
+        ? JSON.stringify({ mentionAI: true })
+        : undefined
+    const body = {
+      conversationId: Number(payload.conversationId),
+      type: typeToInt(payload.type),
+      content: payload.content,
+      extra
+    }
+
+    // 1. WebSocket 优先
+    const wsOk = isWsConnected()
+    if (import.meta.env.DEV) {
+      console.log('[ChatStore] sendMessage: WS连接状态 =', wsOk, '| 会话:', payload.conversationId)
+    }
+    if (wsOk) {
+      const sent = wsSendMessage(body)
+      if (sent) {
+        // 等待广播回环确认（10s 超时）
+        // handleIncomingMessage 的去重逻辑会替换临时消息为真实消息
+        setTimeout(() => {
+          const list = messageMap.value[payload.conversationId]
+          if (!list) return
+          const idx = list.findIndex((m) => m.id === tempId)
+          if (idx !== -1 && list[idx].sendStatus === 'sending') {
+            // 仍为 sending 状态 → 未收到广播确认 → 标记失败
+            list[idx].sendStatus = 'failed'
+          }
+        }, 10000)
+        return
+      }
+    }
+
+    // 2. WebSocket 不可用 → 降级走 REST
+    try {
+      const real = await chatApi.sendMessage(payload) as unknown as RawMessage
+      const mapped = mapMessage(real, authStore.user?.id)
+      mapped.sendStatus = 'sent'
+      const list = messageMap.value[payload.conversationId]
+      const idx = list.findIndex((m) => m.id === tempId)
+      if (idx !== -1) list[idx] = mapped
+    } catch (err) {
+      console.error('[ChatStore] REST 发送消息失败:', err)
+      const list = messageMap.value[payload.conversationId]
+      const idx = list.findIndex((m) => m.id === tempId)
+      if (idx !== -1) list[idx].sendStatus = 'failed'
+    }
+  }
+
+  /** 重试发送失败的消息 */
+  async function retrySendMessage(failedMessage: Message): Promise<void> {
+    const list = messageMap.value[failedMessage.conversationId]
+    if (!list) return
+    const idx = list.findIndex((m) => m.id === failedMessage.id)
+    if (idx === -1) return
+
+    // 重置为发送中
+    list[idx].sendStatus = 'sending'
+
+    const body = {
+      conversationId: Number(failedMessage.conversationId),
+      type: typeToInt(failedMessage.type),
+      content: failedMessage.content,
+      extra: failedMessage.extra
+    }
+
+    // 1. WebSocket 优先
+    if (isWsConnected()) {
+      const sent = wsSendMessage(body)
+      if (sent) {
+        const tempId = failedMessage.id
+        setTimeout(() => {
+          const l = messageMap.value[failedMessage.conversationId]
+          if (!l) return
+          const i = l.findIndex((m) => m.id === tempId)
+          if (i !== -1 && l[i].sendStatus === 'sending') {
+            l[i].sendStatus = 'failed'
+          }
+        }, 10000)
+        return
+      }
+    }
+
+    // 2. 降级 REST
+    try {
+      const payload: SendMessageRequest = {
+        conversationId: failedMessage.conversationId,
+        type: failedMessage.type,
+        content: failedMessage.content,
+        extra: failedMessage.extra
+      }
+      const real = await chatApi.sendMessage(payload) as unknown as RawMessage
+      const mapped = mapMessage(real, authStore.user?.id)
+      mapped.sendStatus = 'sent'
+      const i = list.findIndex((m) => m.id === failedMessage.id)
+      if (i !== -1) list[i] = mapped
+    } catch (err) {
+      console.error('[ChatStore] 重试发送失败:', err)
+      const i = list.findIndex((m) => m.id === failedMessage.id)
+      if (i !== -1) list[i].sendStatus = 'failed'
+    }
   }
 
   /** 处理 WebSocket 收到的新消息（兼容包装结构与裸 Message） */
@@ -335,6 +443,16 @@ export const useChatStore = defineStore('chat', () => {
       if (message.sender === 'ai') {
         const placeholder = list.find((m) => m.sender === 'ai' && m.content === message.content)
         if (placeholder) placeholder.id = message.id
+      } else if (message.sender === 'self') {
+        // WebSocket 广播回环：用后端真实消息（含 DB ID）替换临时消息，标记为已送达
+        const tempIdx = list.findIndex(
+          (m) => m.sender === 'self' && m.content === message.content && m.id !== message.id &&
+          (m.sendStatus === 'sending' || m.sendStatus === 'failed')
+        )
+        if (tempIdx !== -1) {
+          message.sendStatus = 'sent'
+          list[tempIdx] = message
+        }
       }
       return
     }
@@ -354,8 +472,12 @@ export const useChatStore = defineStore('chat', () => {
         conv.unread = (conv.unread || 0) + 1
       } else {
         // 当前会话：后端 sendMessage 已对除发送者外所有成员 unread_count + 1，
-        // 需立即调用 markRead 重置后端未读数，避免刷新后未读数重现
-        chatApi.markRead(conversationId).catch(() => {})
+        // 需立即通知后端重置未读数，避免刷新后未读数重现（WebSocket 优先，REST 降级）
+        if (isWsConnected()) {
+          wsSendReadReceipt(conversationId)
+        } else {
+          chatApi.markRead(conversationId).catch(() => {})
+        }
       }
     } else {
       // 会话不在本地列表中（用户曾删除会话，但对方发了新消息，后端已恢复成员记录）。
@@ -519,6 +641,7 @@ export const useChatStore = defineStore('chat', () => {
     fetchMessages,
     loadMoreMessages,
     sendMessage,
+    retrySendMessage,
     handleIncomingMessage,
     handleStatusChange,
     fetchAllGroupConversations,

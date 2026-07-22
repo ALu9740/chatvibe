@@ -12,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'contextmenu', payload: { event: MouseEvent; message: Message }): void
+  (e: 'retry', payload: { message: Message }): void
 }>()
 
 // 头像首字母
@@ -83,6 +84,10 @@ function onContextmenu(e: MouseEvent) {
   if (isSystem.value) return
   e.preventDefault()
   emit('contextmenu', { event: e, message: props.message })
+}
+
+function onRetry() {
+  emit('retry', { message: props.message })
 }
 </script>
 
@@ -156,6 +161,21 @@ function onContextmenu(e: MouseEvent) {
         </template>
       </div>
     </div>
+
+    <!-- 发送状态指示器（仅自己消息，在气泡左侧） -->
+    <div v-if="isSelf && message.sendStatus === 'sending'" class="msg-status-sending" title="发送中">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="sending-icon">
+        <circle cx="12" cy="12" r="10"></circle>
+        <polyline points="12 6 12 12 16 14"></polyline>
+      </svg>
+    </div>
+    <div v-if="isSelf && message.sendStatus === 'failed'" class="msg-status-failed" title="发送失败，点击重试" @click.stop="onRetry">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="12" cy="12" r="10"></circle>
+        <path d="M12 7v6" stroke="#fff" stroke-width="2" stroke-linecap="round"></path>
+        <circle cx="12" cy="16.5" r="1" fill="#fff"></circle>
+      </svg>
+    </div>
   </div>
 </template>
 
@@ -225,5 +245,37 @@ function onContextmenu(e: MouseEvent) {
 .file-download-icon {
   flex-shrink: 0;
   color: var(--c-text-muted);
+}
+
+/* 发送状态指示器 */
+.msg-status-sending {
+  display: flex;
+  align-items: center;
+  color: var(--c-text-muted);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.sending-icon {
+  animation: msg-spin 1s linear infinite;
+}
+
+@keyframes msg-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.msg-status-failed {
+  display: flex;
+  align-items: center;
+  color: #f56c6c;
+  flex-shrink: 0;
+  align-self: center;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.msg-status-failed:hover {
+  opacity: 0.7;
 }
 </style>

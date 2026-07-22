@@ -23,23 +23,62 @@ interface RawMessage {
   createdAt?: string
 }
 
+// === 模块级状态（跨 composable 调用共享） ===
+let client: Client | null = null
+const connected = ref(false)
+const subscriptions = new Map<string, { id: string }>()
+
+/** WebSocket 是否已连接（可在 store / 任意模块中调用） */
+export function isWsConnected(): boolean {
+  return connected.value
+}
+
+/** 通过 WebSocket 发布 STOMP 消息，返回是否成功发送 */
+export function wsPublish(destination: string, body: unknown): boolean {
+  if (!client) {
+    console.warn('[ChatVibe WS] wsPublish 失败: client 为 null（connect 未调用）')
+    return false
+  }
+  if (!client.connected) {
+    console.warn('[ChatVibe WS] wsPublish 失败: STOMP 未连接')
+    return false
+  }
+  client.publish({
+    destination,
+    body: JSON.stringify(body)
+  })
+  return true
+}
+
+/** 通过 WebSocket 发送聊天消息 */
+export function wsSendMessage(body: unknown): boolean {
+  const ok = wsPublish('/app/chat.send', body)
+  console.log('[ChatVibe WS] SEND /app/chat.send:', ok, JSON.stringify(body).substring(0, 200))
+  return ok
+}
+
+/** 通过 WebSocket 发送已读回执 */
+export function wsSendReadReceipt(conversationId: number | string): boolean {
+  return wsPublish('/app/chat.read', { conversationId: Number(conversationId) })
+}
+
 /** WebSocket 连接管理 composable */
 export function useWebSocket() {
   const wsUrl = import.meta.env.VITE_WS_URL
-  const connected = ref(false)
-  let client: Client | null = null
-  // 订阅缓存，便于断线重连后恢复
-  const subscriptions = ref<Map<string, { id: string }>>(new Map())
 
   /** 建立 STOMP 连接 */
   function connect(): void {
     const authStore = useAuthStore()
-    if (!authStore.isLoggedIn) return
+    if (!authStore.isLoggedIn) {
+      console.warn('[ChatVibe WS] 用户未登录，跳过 WebSocket 连接')
+      return
+    }
 
     // 后端 JwtHandshakeInterceptor 从 URL query 参数 ?token=xxx 提取 JWT
     // SockJS 握手发生在 STOMP CONNECT 之前，connectHeaders 中的 Authorization 无法被握手拦截器读取
     const token = getToken() || ''
     const sockjsUrl = `${wsUrl}?token=${encodeURIComponent(token)}`
+    console.log('[ChatVibe WS] 开始连接:', sockjsUrl)
 
     client = new Client({
       // 使用 SockJS 作为传输层，token 通过 query 参数传递以通过握手鉴权
@@ -47,14 +86,21 @@ export function useWebSocket() {
       reconnectDelay: 5000,
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
-      debug: () => {
-        // 生产环境关闭调试日志
-      },
+      // 开发环境启用 STOMP 协议调试日志
+      debug: import.meta.env.DEV
+        ? (msg) => console.log('[STOMP]', msg)
+        : () => {},
       onConnect: () => {
+        console.log('[ChatVibe WS] ✅ 连接成功')
         connected.value = true
         subscribeAll()
       },
       onDisconnect: () => {
+        console.log('[ChatVibe WS] ❌ 连接断开')
+        connected.value = false
+      },
+      onWebSocketError: (event) => {
+        console.error('[ChatVibe WS] WebSocket 传输层错误:', event)
         connected.value = false
       },
       onStompError: (frame) => {
@@ -82,7 +128,7 @@ export function useWebSocket() {
         console.error('[ChatVibe WS] 消息解析失败', e)
       }
     })
-    subscriptions.value.set('user', { id: userSub.id })
+    subscriptions.set('user', { id: userSub.id })
 
     // 订阅用户状态变更广播（上线/下线/忙碌/离开）
     const statusSub = client.subscribe('/topic/status', (message) => {
@@ -93,7 +139,7 @@ export function useWebSocket() {
         console.error('[ChatVibe WS] 状态消息解析失败', e)
       }
     })
-    subscriptions.value.set('status', { id: statusSub.id })
+    subscriptions.set('status', { id: statusSub.id })
 
     // 订阅强制下线通知（账号在其他设备登录时触发）
     const userId = authStore.user?.id
@@ -119,7 +165,7 @@ export function useWebSocket() {
           console.error('[ChatVibe WS] 强制下线消息解析失败', e)
         }
       })
-      subscriptions.value.set('force-logout', { id: kickSub.id })
+      subscriptions.set('force-logout', { id: kickSub.id })
 
       // 订阅消息通知（好友请求/群邀请/系统消息等）
       const notifSub = client.subscribe(`/topic/user.${userId}.notification`, (message) => {
@@ -130,7 +176,7 @@ export function useWebSocket() {
           console.error('[ChatVibe WS] 通知消息解析失败', e)
         }
       })
-      subscriptions.value.set('notification', { id: notifSub.id })
+      subscriptions.set('notification', { id: notifSub.id })
     }
 
     // 订阅全部会话广播频道，确保任意会话的新消息都能实时接收
@@ -143,11 +189,14 @@ export function useWebSocket() {
   function subscribeConversation(conversationId: string): void {
     if (!client || !client.connected) return
     const key = `conv_${conversationId}`
-    if (subscriptions.value.has(key)) return
+    if (subscriptions.has(key)) return
+
+    console.log(`[ChatVibe WS] 订阅会话频道: /topic/conversation.${conversationId}`)
 
     const chatStore = useChatStore()
     // 后端 ChatWebSocketHandler 广播路径为 /topic/conversation.{conversationId}
     const sub = client.subscribe(`/topic/conversation.${conversationId}`, (message) => {
+      console.log(`[ChatVibe WS] 📨 收到会话 ${conversationId} 的 MESSAGE 帧:`, message.body?.substring(0, 200))
       try {
         // 后端直接广播 Message 实体（裸结构），非 WsMessage 包装
         const payload = JSON.parse(message.body) as RawMessage
@@ -156,34 +205,17 @@ export function useWebSocket() {
         console.error('[ChatVibe WS] 会话消息解析失败', e)
       }
     })
-    subscriptions.value.set(key, { id: sub.id })
+    subscriptions.set(key, { id: sub.id })
   }
 
   /** 取消订阅会话频道 */
   function unsubscribeConversation(conversationId: string): void {
     const key = `conv_${conversationId}`
-    const sub = subscriptions.value.get(key)
+    const sub = subscriptions.get(key)
     if (sub && client) {
       client.unsubscribe(sub.id)
-      subscriptions.value.delete(key)
+      subscriptions.delete(key)
     }
-  }
-
-  /** 发送消息到后端 */
-  function send(destination: string, body: unknown): void {
-    if (!client || !client.connected) {
-      toast.warning('连接已断开', '请稍后重试')
-      return
-    }
-    client.publish({
-      destination,
-      body: JSON.stringify(body)
-    })
-  }
-
-  /** 发送聊天消息（快捷方法） */
-  function sendMessage(body: unknown): void {
-    send('/app/chat.send', body)
   }
 
   /** 断开连接 */
@@ -192,7 +224,7 @@ export function useWebSocket() {
       client.deactivate()
       client = null
       connected.value = false
-      subscriptions.value.clear()
+      subscriptions.clear()
     }
   }
 
@@ -205,8 +237,6 @@ export function useWebSocket() {
     connect,
     disconnect,
     subscribeConversation,
-    unsubscribeConversation,
-    sendMessage,
-    send
+    unsubscribeConversation
   }
 }
