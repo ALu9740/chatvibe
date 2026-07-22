@@ -69,15 +69,15 @@ public class ChatServiceImpl implements ChatService {
 
 
     @Override
+    @RateLimiter(name = "messageHistoryRateLimiter", fallbackMethod = "getHistoryMessagesFallback")
+    @CircuitBreaker(name = "messageHistoryService", fallbackMethod = "getHistoryMessagesFallback")
     public List<Message> getHistoryMessages(Long conversationId, Long lastId, int size) {
         Long userId = SecurityUtils.getCurrentUserId();
         // 校验是否为会话成员
         if (!isMember(conversationId, userId)) {
             throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
         }
-        if (size <= 0 || size > 100) {
-            size = 20;
-        }
+        size = Math.min(Math.max(size, 1), 100);
         return messageMapper.selectMessagesPage(conversationId, userId, lastId, size);
     }
 
@@ -528,6 +528,18 @@ public class ChatServiceImpl implements ChatService {
             throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
         }
         log.warn("[聊天] 会话列表熔断降级: err={}", t.getMessage());
+        return Collections.emptyList();
+    }
+
+    /** 历史消息降级：限流 → 429；熔断 → 空列表 */
+    private List<Message> getHistoryMessagesFallback(Long conversationId, Long lastId, int size, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 历史消息熔断降级: convId={}, err={}", conversationId, t.getMessage());
         return Collections.emptyList();
     }
 }

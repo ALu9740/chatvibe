@@ -134,6 +134,10 @@ resilience4j:
         limit-for-period: 30
         limit-refresh-period: 1m
         timeout-duration: 0
+      messageHistoryRateLimiter: # 历史消息限流
+        limit-for-period: 60
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService: # AI 服务熔断器
@@ -343,4 +347,15 @@ resilience4j:
         permitted-number-of-calls-in-half-open-state: 3
         automatic-transition-from-open-to-half-open-enabled: true
         sliding-window-type: COUNT_BASED
+      messageHistoryService: # 历史消息熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
 
