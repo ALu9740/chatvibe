@@ -30,12 +30,14 @@ import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,6 +61,11 @@ public class ChatServiceImpl implements ChatService {
     private final GroupMemberMapper groupMemberMapper;
     private final UserService userService;
     private final MessageEventProducer messageEventProducer;
+
+    private final StringRedisTemplate stringRedisTemplate;
+
+    private static final String MARK_READ_LOCK_PREFIX = "chat:markread:lock:";
+    private static final Duration LOCK_TTL = Duration.ofSeconds(3);
 
     @Override
     @RateLimiter(name = "conversationListRateLimiter", fallbackMethod = "getConversationListFallback")
@@ -168,22 +175,36 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @RateLimiter(name = "markReadRateLimiter", fallbackMethod = "markAsReadFallbackNoUserId")
+    @CircuitBreaker(name = "markReadService", fallbackMethod = "markAsReadFallbackNoUserId")
     @Transactional(rollbackFor = Exception.class)
     public void markAsRead(Long conversationId) {
         markAsRead(conversationId, SecurityUtils.getCurrentUserId());
     }
 
     @Override
+    @RateLimiter(name = "markReadRateLimiter", fallbackMethod = "markAsReadFallback")
+    @CircuitBreaker(name = "markReadService", fallbackMethod = "markAsReadFallback")
     @Transactional(rollbackFor = Exception.class)
     public void markAsRead(Long conversationId, Long userId) {
-        if (!isMember(conversationId, userId)) {
-            throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
+        // Redis 分布式锁防止并发重复标记（同一用户+同一会话）
+        String lockKey = MARK_READ_LOCK_PREFIX + userId + ":" + conversationId;
+        Boolean locked = stringRedisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            // 并发请求直接返回，UPDATE 本身幂等，无需等待
+            return;
         }
-        conversationMemberMapper.update(null, new LambdaUpdateWrapper<ConversationMember>()
+
+        // 单条 UPDATE 带 isMember 条件，合并校验+更新，减少一次 SELECT
+        int updated = conversationMemberMapper.update(null, new LambdaUpdateWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, conversationId)
                 .eq(ConversationMember::getUserId, userId)
                 .set(ConversationMember::getUnreadCount, 0)
                 .set(ConversationMember::getLastReadAt, LocalDateTime.now()));
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
+        }
     }
 
     @Override
@@ -556,5 +577,28 @@ public class ChatServiceImpl implements ChatService {
         }
         log.warn("[聊天] 历史消息熔断降级: convId={}, err={}", conversationId, t.getMessage());
         return Collections.emptyList();
+    }
+
+    /** 标记已读降级：限流 → 429；BusinessException 透传；熔断 → 静默忽略 */
+    private void markAsReadFallback(Long conversationId, Long userId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 标记已读熔断降级: convId={}, userId={}, err={}", conversationId, userId, t.getMessage());
+        // 熔断时静默降级：不标记已读不影响核心功能，用户下次切换会话会重新触发
+    }
+
+    /** 标记已读降级（REST 路径，单参数版） */
+    private void markAsReadFallbackNoUserId(Long conversationId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 标记已读熔断降级(REST): convId={}, err={}", conversationId, t.getMessage());
     }
 }

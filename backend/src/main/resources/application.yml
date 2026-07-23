@@ -140,6 +140,10 @@ resilience4j:
         limit-for-period: 60
         limit-refresh-period: 1m
         timeout-duration: 0
+      markReadRateLimiter: # 标记已读限流
+        limit-for-period: 60
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService: # AI 服务熔断器
@@ -360,4 +364,14 @@ resilience4j:
         sliding-window-type: COUNT_BASED
         ignore-exceptions:
           - com.chatvibe.common.exception.BusinessException
-
+      markReadService: # 标记已读熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
