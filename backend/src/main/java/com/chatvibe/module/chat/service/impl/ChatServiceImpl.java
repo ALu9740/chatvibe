@@ -476,6 +476,8 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @RateLimiter(name = "hideMsgRateLimiter", fallbackMethod = "hideMessageFallback")
+    @CircuitBreaker(name = "hideMsgService", fallbackMethod = "hideMessageFallback")
     @Transactional(rollbackFor = Exception.class)
     public void hideMessage(Long messageId) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -706,5 +708,16 @@ public class ChatServiceImpl implements ChatService {
             throw (BusinessException) t;
         }
         log.warn("[聊天] 删除会话熔断降级: convId={}, err={}", conversationId, t.getMessage());
+    }
+
+    /** 隐藏消息降级：限流 → 429；BusinessException 透传；熔断 → 静默忽略 */
+    private void hideMessageFallback(Long messageId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 隐藏消息熔断降级: msgId={}, err={}", messageId, t.getMessage());
     }
 }
