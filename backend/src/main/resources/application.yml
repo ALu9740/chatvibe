@@ -175,6 +175,22 @@ resilience4j:
       rejoinConvRateLimiter: # 重新加入群聊限流
         limit-for-period: 20
         limit-refresh-period: 1m
+        timeout-duration:
+      notifListRateLimiter: # 通知列表限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      notifUnreadRateLimiter: # 未读数限流
+        limit-for-period: 120
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      notifReadRateLimiter: # 标记已读限流
+        limit-for-period: 60
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      notifDeleteRateLimiter: # 删除通知限流
+        limit-for-period: 60
+        limit-refresh-period: 1m
         timeout-duration: 0
   circuitbreaker:
     instances:
@@ -485,6 +501,50 @@ resilience4j:
         ignore-exceptions:
           - com.chatvibe.common.exception.BusinessException
       rejoinConvService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      notifListService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      notifUnreadService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      notifReadService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      notifDeleteService:
         register-health-indicator: true
         sliding-window-size: 10
         minimum-number-of-calls: 5

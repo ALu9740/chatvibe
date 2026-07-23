@@ -51,6 +51,11 @@ public class CacheConfig {
                 .maximumSize(500)
                 .recordStats()
                 .build());
+        cacheManager.registerCustomCache("notifUnreadCount", Caffeine.newBuilder()
+                .expireAfterWrite(30, TimeUnit.SECONDS)
+                .maximumSize(500)
+                .recordStats()
+                .build());
         return cacheManager;
     }
 
