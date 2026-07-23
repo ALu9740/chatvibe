@@ -68,6 +68,7 @@ public class ChatServiceImpl implements ChatService {
     private static final String TOGGLE_MUTE_LOCK_PREFIX = "chat:toggle:mute:";
     private static final String TOGGLE_PIN_LOCK_PREFIX = "chat:toggle:pin:";
     private static final String CREATE_PRIVATE_CONV_LOCK_PREFIX = "chat:create:private:";
+    private static final String DELETE_CONV_LOCK_PREFIX = "chat:delete:conv:";
     private static final Duration LOCK_TTL = Duration.ofSeconds(3);
 
     @Override
@@ -423,25 +424,41 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @RateLimiter(name = "deleteConvRateLimiter", fallbackMethod = "deleteConversationFallback")
+    @CircuitBreaker(name = "deleteConvService", fallbackMethod = "deleteConversationFallback")
     @Transactional(rollbackFor = Exception.class)
     public void deleteConversation(Long conversationId) {
         Long userId = SecurityUtils.getCurrentUserId();
-        if (!isMember(conversationId, userId)) {
-            throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
+
+        // Redis 分布式锁防止并发删除导致状态不一致
+        // （尤其是私聊双方同时删除时归档逻辑竞态）
+        String lockKey = DELETE_CONV_LOCK_PREFIX + userId + ":" + conversationId;
+        Boolean locked = stringRedisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "操作过于频繁，请稍后再试");
         }
+
+        // 合并校验：直接查询会话，用 isMember 校验成员身份
+        // 避免先 isMember(SELECT) + selectById(SELECT) 两次查询
         Conversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
             throw new BusinessException(ResultCode.CONVERSATION_NOT_FOUND);
+        }
+        if (!isMember(conversationId, userId)) {
+            throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
         }
         int type = conversation.getType() == null ? 0 : conversation.getType();
         // AI 会话暂不支持删除
         if (type == ConversationTypeEnum.TYPE_AI.getCode()) {
             throw new BusinessException(ResultCode.PARAM_INVALID, "AI会话暂不支持删除");
         }
+
         // 移除当前用户的会话成员记录(逻辑删除)
         conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, conversationId)
                 .eq(ConversationMember::getUserId, userId));
+
         if (type == ConversationTypeEnum.TYPE_PRIVATE.getCode()) {
             // 私聊: 检查对方是否仍在会话中,若已无成员则归档会话
             Long remainCount = conversationMemberMapper.selectCount(
@@ -678,5 +695,16 @@ public class ChatServiceImpl implements ChatService {
         }
         log.warn("[聊天] 创建私聊会话熔断降级: targetUserId={}, err={}", targetUserId, t.getMessage());
         return null;
+    }
+
+    /** 删除会话降级：限流 → 429；BusinessException 透传；熔断 → 静默忽略 */
+    private void deleteConversationFallback(Long conversationId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 删除会话熔断降级: convId={}, err={}", conversationId, t.getMessage());
     }
 }

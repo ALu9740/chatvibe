@@ -156,6 +156,10 @@ resilience4j:
         limit-for-period: 20
         limit-refresh-period: 1m
         timeout-duration: 0
+      deleteConvRateLimiter: # 删除会话限流
+        limit-for-period: 20
+        limit-refresh-period: 1m
+        timeout-duration: 0
   circuitbreaker:
     instances:
       aiService: # AI 服务熔断器
@@ -410,6 +414,17 @@ resilience4j:
         ignore-exceptions:
           - com.chatvibe.common.exception.BusinessException
       createPrivateConvService: # 创建私聊会话熔断器
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      deleteConvService: # 删除会话熔断器
         register-health-indicator: true
         sliding-window-size: 10
         minimum-number-of-calls: 5
