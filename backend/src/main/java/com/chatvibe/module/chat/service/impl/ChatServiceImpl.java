@@ -65,6 +65,8 @@ public class ChatServiceImpl implements ChatService {
     private final StringRedisTemplate stringRedisTemplate;
 
     private static final String MARK_READ_LOCK_PREFIX = "chat:markread:lock:";
+    private static final String TOGGLE_MUTE_LOCK_PREFIX = "chat:toggle:mute:";
+    private static final String TOGGLE_PIN_LOCK_PREFIX = "chat:toggle:pin:";
     private static final Duration LOCK_TTL = Duration.ofSeconds(3);
 
     @Override
@@ -208,39 +210,64 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @RateLimiter(name = "toggleMuteRateLimiter", fallbackMethod = "toggleMuteFallback")
+    @CircuitBreaker(name = "toggleMuteService", fallbackMethod = "toggleMuteFallback")
     @Transactional(rollbackFor = Exception.class)
     public boolean toggleMute(Long conversationId) {
         Long userId = SecurityUtils.getCurrentUserId();
-        if (!isMember(conversationId, userId)) {
+        // Redis 分布式锁防止并发 toggle 导致状态反复跳转
+        String lockKey = TOGGLE_MUTE_LOCK_PREFIX + userId + ":" + conversationId;
+        Boolean locked = stringRedisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "操作过于频繁，请稍后再试");
+        }
+
+        // 单条 UPDATE 实现 toggle：用 SQL CASE 表达式直接翻转状态
+        // WHERE 条件同时承担 isMember 校验（deleted=0 由 @TableLogic 自动追加）
+        int updated = conversationMemberMapper.update(null, new LambdaUpdateWrapper<ConversationMember>()
+                .eq(ConversationMember::getConversationId, conversationId)
+                .eq(ConversationMember::getUserId, userId)
+                .setSql("muted = CASE WHEN muted = 1 THEN 0 ELSE 1 END"));
+        if (updated == 0) {
             throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
         }
+
+        // 查询切换后的状态返回给前端
         ConversationMember cm = conversationMemberMapper.selectOne(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, conversationId)
                 .eq(ConversationMember::getUserId, userId));
-        int newMuted = (cm != null && cm.getMuted() != null && cm.getMuted() == ConversationMemberMutedEnum.MUTE_YES.getCode()) ? ConversationMemberMutedEnum.MUTE_NO.getCode() : ConversationMemberMutedEnum.MUTE_YES.getCode();
-        conversationMemberMapper.update(null, new LambdaUpdateWrapper<ConversationMember>()
-                .eq(ConversationMember::getConversationId, conversationId)
-                .eq(ConversationMember::getUserId, userId)
-                .set(ConversationMember::getMuted, newMuted));
-        return newMuted == ConversationMemberMutedEnum.MUTE_YES.getCode();
+        return cm != null && cm.getMuted() != null && cm.getMuted() == ConversationMemberMutedEnum.MUTE_YES.getCode();
     }
 
     @Override
+    @RateLimiter(name = "togglePinRateLimiter", fallbackMethod = "togglePinFallback")
+    @CircuitBreaker(name = "togglePinService", fallbackMethod = "togglePinFallback")
     @Transactional(rollbackFor = Exception.class)
     public boolean togglePin(Long conversationId) {
         Long userId = SecurityUtils.getCurrentUserId();
-        if (!isMember(conversationId, userId)) {
+        // Redis 分布式锁防止并发 toggle
+        String lockKey = TOGGLE_PIN_LOCK_PREFIX + userId + ":" + conversationId;
+        Boolean locked = stringRedisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "操作过于频繁，请稍后再试");
+        }
+
+        // 原子 toggle：用 SQL CASE 表达式直接翻转状态
+        int updated = conversationMemberMapper.update(null, new LambdaUpdateWrapper<ConversationMember>()
+                .eq(ConversationMember::getConversationId, conversationId)
+                .eq(ConversationMember::getUserId, userId)
+                .setSql("pinned = CASE WHEN pinned = 1 THEN 0 ELSE 1 END"));
+        if (updated == 0) {
             throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER);
         }
+
+        // 查询切换后的状态返回给前端
         ConversationMember cm = conversationMemberMapper.selectOne(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, conversationId)
                 .eq(ConversationMember::getUserId, userId));
-        int newPinned = (cm != null && cm.getPinned() != null && cm.getPinned() == ConversationMemberPinnedEnum.PINNED_YES.getCode()) ? ConversationMemberPinnedEnum.PINNED_NO.getCode() : ConversationMemberPinnedEnum.PINNED_YES.getCode();
-        conversationMemberMapper.update(null, new LambdaUpdateWrapper<ConversationMember>()
-                .eq(ConversationMember::getConversationId, conversationId)
-                .eq(ConversationMember::getUserId, userId)
-                .set(ConversationMember::getPinned, newPinned));
-        return newPinned == ConversationMemberPinnedEnum.PINNED_YES.getCode();
+        return cm != null && cm.getPinned() != null && cm.getPinned() == ConversationMemberPinnedEnum.PINNED_YES.getCode();
     }
 
     @Override
@@ -600,5 +627,29 @@ public class ChatServiceImpl implements ChatService {
             throw (BusinessException) t;
         }
         log.warn("[聊天] 标记已读熔断降级(REST): convId={}, err={}", conversationId, t.getMessage());
+    }
+
+    /** 免打扰切换降级：限流 → 429；BusinessException 透传；熔断 → false */
+    private boolean toggleMuteFallback(Long conversationId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 免打扰切换熔断降级: convId={}, err={}", conversationId, t.getMessage());
+        return false;
+    }
+
+    /** 置顶切换降级：限流 → 429；BusinessException 透传；熔断 → false */
+    private boolean togglePinFallback(Long conversationId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 置顶切换熔断降级: convId={}, err={}", conversationId, t.getMessage());
+        return false;
     }
 }
