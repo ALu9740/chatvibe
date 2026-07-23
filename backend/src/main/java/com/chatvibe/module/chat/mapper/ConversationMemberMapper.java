@@ -31,8 +31,9 @@ public interface ConversationMemberMapper extends BaseMapper<ConversationMember>
      *
      * @param conversationId 会话ID
      * @param userId         用户ID
+     * @return 受影响行数（0 表示未找到记录，1 表示成功）
      */
-    void clearHistory(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
+    int clearHistory(@Param("conversationId") Long conversationId, @Param("userId") Long userId);
 
     /**
      * 私聊场景：恢复已删除会话的成员记录（新消息到达时，会话重新出现在对方列表中）。

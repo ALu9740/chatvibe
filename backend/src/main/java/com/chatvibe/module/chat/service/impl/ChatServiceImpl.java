@@ -454,6 +454,9 @@ public class ChatServiceImpl implements ChatService {
             throw new BusinessException(ResultCode.PARAM_INVALID, "AI会话暂不支持删除");
         }
 
+        // 先清空聊天记录（重置 created_at = NOW()），确保用户重新进入后看不到删除前的历史消息
+        conversationMemberMapper.clearHistory(conversationId, userId);
+
         // 移除当前用户的会话成员记录(逻辑删除)
         conversationMemberMapper.delete(new LambdaQueryWrapper<ConversationMember>()
                 .eq(ConversationMember::getConversationId, conversationId)
@@ -552,6 +555,8 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @RateLimiter(name = "clearHistoryRateLimiter", fallbackMethod = "clearHistoryFallback")
+    @CircuitBreaker(name = "clearHistoryService", fallbackMethod = "clearHistoryFallback")
     @Transactional(rollbackFor = Exception.class)
     public void clearHistory(Long conversationId) {
         Long userId = SecurityUtils.getCurrentUserId();
@@ -561,8 +566,12 @@ public class ChatServiceImpl implements ChatService {
         // 重置当前用户的 conversation_member.created_at 为当前时间，
         // 使 selectMessagesPage 按 m.created_at >= cm.created_at 过滤后不再返回历史消息。
         // 其他成员的 created_at 不受影响，仍可正常查看完整聊天记录。
-        conversationMemberMapper.clearHistory(conversationId, userId);
-        log.info("[会话] 清空聊天记录: convId={}, userId={}", conversationId, userId);
+        int updated = conversationMemberMapper.clearHistory(conversationId, userId);
+        if (updated == 0) {
+            log.warn("[会话] 清空聊天记录未更新任何行: convId={}, userId={}", conversationId, userId);
+            throw new BusinessException(ResultCode.FAIL, "清空聊天记录失败");
+        }
+        log.info("[会话] 清空聊天记录成功: convId={}, userId={}, updatedRows={}", conversationId, userId, updated);
     }
 
     /**
@@ -719,5 +728,16 @@ public class ChatServiceImpl implements ChatService {
             throw (BusinessException) t;
         }
         log.warn("[聊天] 隐藏消息熔断降级: msgId={}, err={}", messageId, t.getMessage());
+    }
+
+    /** 清空聊天记录降级：限流 → 429；BusinessException 透传；熔断 → 静默忽略 */
+    private void clearHistoryFallback(Long conversationId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 清空聊天记录熔断降级: convId={}, err={}", conversationId, t.getMessage());
     }
 }

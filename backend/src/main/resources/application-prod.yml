@@ -22,6 +22,8 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
+      # 设置 MySQL 会话时区为 +08:00，确保 NOW() 返回北京时间
+      connection-init-sql: SET time_zone = '+08:00'
   data:
     redis:
       host: ${REDIS_HOST}
