@@ -48,7 +48,8 @@
                  LEFT JOIN conversation_member peer_cm
                            ON c.id = peer_cm.conversation_id
                                AND peer_cm.user_id != #{userId}
-            AND peer_cm.deleted = 0
+          AND peer_cm.deleted = 0
+          AND c.type = 1
             LEFT JOIN user peer
         ON peer_cm.user_id = peer.id
             AND peer.deleted = 0
