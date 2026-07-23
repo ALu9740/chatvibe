@@ -23,7 +23,8 @@ const TYPE_MAP: Record<number, NotificationItem['type']> = {
   4: 'FRIEND_DELETE',
   5: 'GROUP_INVITE',
   6: 'GROUP_REMOVE',
-  7: 'GROUP_DISSOLVE'
+  7: 'GROUP_DISSOLVE',
+  8: 'GROUP_TRANSFER'
 }
 
 function mapNotification(raw: RawNotification): NotificationItem {

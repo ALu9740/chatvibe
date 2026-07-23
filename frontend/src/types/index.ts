@@ -248,6 +248,7 @@ export type NotificationType =
   | 'GROUP_INVITE'
   | 'GROUP_REMOVE'
   | 'GROUP_DISSOLVE'
+  | 'GROUP_TRANSFER'
 
 /** 消息通知项 */
 export interface NotificationItem {
