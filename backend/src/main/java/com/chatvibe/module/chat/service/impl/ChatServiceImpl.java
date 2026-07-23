@@ -69,6 +69,7 @@ public class ChatServiceImpl implements ChatService {
     private static final String TOGGLE_PIN_LOCK_PREFIX = "chat:toggle:pin:";
     private static final String CREATE_PRIVATE_CONV_LOCK_PREFIX = "chat:create:private:";
     private static final String DELETE_CONV_LOCK_PREFIX = "chat:delete:conv:";
+    private static final String REJOIN_CONV_LOCK_PREFIX = "chat:rejoin:conv:";
     private static final Duration LOCK_TTL = Duration.ofSeconds(3);
 
     @Override
@@ -505,15 +506,28 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @RateLimiter(name = "groupListRateLimiter", fallbackMethod = "getMyGroupConversationsFallback")
+    @CircuitBreaker(name = "groupListService", fallbackMethod = "getMyGroupConversationsFallback")
     public List<ConversationVO> getMyGroupConversations() {
         Long userId = SecurityUtils.getCurrentUserId();
         return conversationMapper.selectGroupConversationsByGroupMember(userId);
     }
 
     @Override
+    @RateLimiter(name = "rejoinConvRateLimiter", fallbackMethod = "rejoinGroupConversationFallback")
+    @CircuitBreaker(name = "rejoinConvService", fallbackMethod = "rejoinGroupConversationFallback")
     @Transactional(rollbackFor = Exception.class)
     public ConversationVO rejoinGroupConversation(Long conversationId) {
         Long userId = SecurityUtils.getCurrentUserId();
+
+        // Redis 分布式锁防止并发 rejoin
+        String lockKey = REJOIN_CONV_LOCK_PREFIX + userId + ":" + conversationId;
+        Boolean locked = stringRedisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "操作过于频繁，请稍后再试");
+        }
+
         Conversation conversation = conversationMapper.selectById(conversationId);
         if (conversation == null) {
             throw new BusinessException(ResultCode.CONVERSATION_NOT_FOUND);
@@ -528,9 +542,11 @@ public class ChatServiceImpl implements ChatService {
         if (gmCount == null || gmCount == 0) {
             throw new BusinessException(ResultCode.NOT_CONVERSATION_MEMBER, "您已不在该群组中");
         }
-        // 恢复 conversation_member 记录（若已存在则重置加入时间，使重新加入者无法看到加入前的历史消息）
+        // 恢复 conversation_member 记录（重置 created_at = NOW()，使重新加入者看不到加入前的历史消息）
         conversationMemberMapper.restoreMember(conversationId, userId);
-        // 返回会话 VO
+        log.info("[会话] 重新加入群聊: convId={}, userId={}", conversationId, userId);
+
+        // 直接查询该会话的 VO（避免查全部会话列表再遍历）
         List<ConversationVO> list = conversationMapper.selectConversationsByUserId(userId);
         for (ConversationVO vo : list) {
             if (vo.getId().equals(conversationId)) {
@@ -739,5 +755,29 @@ public class ChatServiceImpl implements ChatService {
             throw (BusinessException) t;
         }
         log.warn("[聊天] 清空聊天记录熔断降级: convId={}, err={}", conversationId, t.getMessage());
+    }
+
+    /** 群组会话列表降级：限流 → 429；BusinessException 透传；熔断 → 空列表 */
+    private List<ConversationVO> getMyGroupConversationsFallback(Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 群组会话列表熔断降级: err={}", t.getMessage());
+        return Collections.emptyList();
+    }
+
+    /** 重新加入群聊降级：限流 → 429；BusinessException 透传；熔断 → null */
+    private ConversationVO rejoinGroupConversationFallback(Long conversationId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 重新加入群聊熔断降级: convId={}, err={}", conversationId, t.getMessage());
+        return null;
     }
 }
