@@ -67,6 +67,7 @@ public class ChatServiceImpl implements ChatService {
     private static final String MARK_READ_LOCK_PREFIX = "chat:markread:lock:";
     private static final String TOGGLE_MUTE_LOCK_PREFIX = "chat:toggle:mute:";
     private static final String TOGGLE_PIN_LOCK_PREFIX = "chat:toggle:pin:";
+    private static final String CREATE_PRIVATE_CONV_LOCK_PREFIX = "chat:create:private:";
     private static final Duration LOCK_TTL = Duration.ofSeconds(3);
 
     @Override
@@ -374,18 +375,34 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    @RateLimiter(name = "createPrivateConvRateLimiter", fallbackMethod = "createPrivateConvFallback")
+    @CircuitBreaker(name = "createPrivateConvService", fallbackMethod = "createPrivateConvFallback")
     @Transactional(rollbackFor = Exception.class)
     public ConversationVO createOrGetPrivateConversation(Long targetUserId) {
         Long currentUserId = SecurityUtils.getCurrentUserId();
         if (targetUserId.equals(currentUserId)) {
             throw new BusinessException(ResultCode.PARAM_INVALID, "不能与自己创建私聊会话");
         }
+
+        // Redis 分布式锁防止 A→B 和 B→A 双向竞态创建重复会话
+        // 锁 key 使用两用户 ID 的有序组合，确保 A→B 和 B→A 使用同一把锁
+        Long minId = Math.min(currentUserId, targetUserId);
+        Long maxId = Math.max(currentUserId, targetUserId);
+        String lockKey = CREATE_PRIVATE_CONV_LOCK_PREFIX + minId + ":" + maxId;
+        Boolean locked = stringRedisTemplate.opsForValue()
+                .setIfAbsent(lockKey, "1", LOCK_TTL);
+        if (!Boolean.TRUE.equals(locked)) {
+            throw new BusinessException(ResultCode.FAIL, "正在创建会话，请稍后再试");
+        }
+
         // 校验目标用户存在
         User targetUser = userService.getById(targetUserId);
         if (targetUser == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
+
         Conversation conversation = createPrivateConversation(currentUserId, targetUserId);
+
         // 转换为 VO（私聊会话的 name/avatar 从对方用户动态获取，conversation 表不存储）
         ConversationVO vo = new ConversationVO();
         vo.setId(conversation.getId());
@@ -398,9 +415,7 @@ public class ChatServiceImpl implements ChatService {
         vo.setMemberCount(conversation.getMemberCount());
         vo.setUnreadCount(0);
         vo.setCreatedAt(conversation.getCreatedAt());
-        // 私聊会话对方用户ID
         vo.setPeerId(targetUserId);
-        // 私聊会话对方在线状态
         vo.setPeerStatus(targetUser.getStatus());
         log.info("[会话] 创建/获取私聊: convId={}, currentUserId={}, targetUserId={}",
                 conversation.getId(), currentUserId, targetUserId);
@@ -651,5 +666,17 @@ public class ChatServiceImpl implements ChatService {
         }
         log.warn("[聊天] 置顶切换熔断降级: convId={}, err={}", conversationId, t.getMessage());
         return false;
+    }
+
+    /** 创建私聊会话降级：限流 → 429；BusinessException 透传；熔断 → null */
+    private ConversationVO createPrivateConvFallback(Long targetUserId, Throwable t) {
+        if (t instanceof RequestNotPermitted) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS);
+        }
+        if (t instanceof BusinessException) {
+            throw (BusinessException) t;
+        }
+        log.warn("[聊天] 创建私聊会话熔断降级: targetUserId={}, err={}", targetUserId, t.getMessage());
+        return null;
     }
 }
