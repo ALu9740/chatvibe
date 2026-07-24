@@ -430,19 +430,46 @@ export const useChatStore = defineStore('chat', () => {
     if (!messageMap.value[conversationId]) {
       messageMap.value[conversationId] = []
     }
-    // 去重：避免自己发送的消息通过 WebSocket 回环导致重复显示
-    //       AI 回复(本地流式占位 vs 后端广播)也按内容+时间去重
+    // 去重：避免重复显示
     const list = messageMap.value[conversationId]
-    const exists = list.some(
+
+    // AI 回复广播去重：查找本地流式占位消息（非数据库数字 ID）。
+    // 不依赖 content 完全匹配：SSE 流式累积的 content 可能与后端落库的 fullResponse
+    // 存在细微差异（换行符处理、多字节字符跨事件分割等），content 不匹配会导致去重失败，
+    // 发起提问的用户会看到两条 AI 回复（流式占位 + 广播落库消息）。
+    // 由于 streaming 标志阻止并发 AI 请求，同一会话内最多只有一个占位消息。
+    let aiPlaceholderIdx = -1
+    if (message.sender === 'ai') {
+      // 优先匹配 content 相同的占位消息；找不到时取最后一个占位消息作为兜底
+      let lastPlaceholderIdx = -1
+      for (let i = list.length - 1; i >= 0; i--) {
+        const m = list[i]
+        if (m.sender === 'ai' && isNaN(Number(m.id))) {
+          if (m.content === message.content) {
+            aiPlaceholderIdx = i
+            break
+          }
+          if (lastPlaceholderIdx === -1) lastPlaceholderIdx = i
+        }
+      }
+      if (aiPlaceholderIdx === -1) aiPlaceholderIdx = lastPlaceholderIdx
+    }
+
+    // 去重判断：
+    // - ID 相同：同一消息被重复广播
+    // - self 消息：WebSocket 回环，用 content + 5s 时间窗去重
+    // - AI 消息：存在占位消息（aiPlaceholderIdx）即视为重复，需替换
+    const exists = aiPlaceholderIdx !== -1 || list.some(
       (m) => m.id === message.id ||
-      (message.sender === 'self' && m.sender === 'self' && m.content === message.content && Math.abs(new Date(m.time).getTime() - new Date(message.time).getTime()) < 5000) ||
-      (message.sender === 'ai' && m.sender === 'ai' && m.content === message.content && message.content !== '' && Math.abs(new Date(m.time).getTime() - new Date(message.time).getTime()) < 30000)
+      (message.sender === 'self' && m.sender === 'self' && m.content === message.content && Math.abs(new Date(m.time).getTime() - new Date(message.time).getTime()) < 5000)
     )
     if (exists) {
-      // AI 流式占位消息已存在，用后端真实消息 id 替换占位 id（便于后续操作）
-      if (message.sender === 'ai') {
-        const placeholder = list.find((m) => m.sender === 'ai' && m.content === message.content)
-        if (placeholder) placeholder.id = message.id
+      if (message.sender === 'ai' && aiPlaceholderIdx !== -1) {
+        // 用后端真实消息替换占位消息（保留流式输出的 content，避免用户看到内容突变）
+        // 只同步后端真实 ID 与落库时间
+        const placeholder = list[aiPlaceholderIdx]
+        placeholder.id = message.id
+        placeholder.time = message.time
       } else if (message.sender === 'self') {
         // WebSocket 广播回环：用后端真实消息（含 DB ID）替换临时消息，标记为已送达
         const tempIdx = list.findIndex(
