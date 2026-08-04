@@ -11,7 +11,7 @@ import type {
   SendMessageRequest,
   WsMessage
 } from '@/types'
-import { generateId } from '@/utils/format'
+import { generateId, getAvatarText } from '@/utils/format'
 import { notifyChatMessage } from '@/utils/notify'
 
 /** 后端 ConversationVO 原始结构 */
@@ -271,6 +271,9 @@ export const useChatStore = defineStore('chat', () => {
   /** 发送消息（乐观更新，WebSocket 优先，REST 降级） */
   async function sendMessage(payload: SendMessageRequest): Promise<void> {
     const tempId = generateId('m')
+    // 填充当前用户昵称和头像，确保发送的消息气泡立即展示发送者信息
+    const myNickname = authStore.user?.nickname || ''
+    const myAvatar = authStore.user?.avatar || ''
     const tempMessage: Message = {
       id: tempId,
       conversationId: payload.conversationId,
@@ -279,7 +282,9 @@ export const useChatStore = defineStore('chat', () => {
       content: payload.content,
       extra: payload.extra,
       time: new Date().toISOString(),
-      sendStatus: 'sending'
+      sendStatus: 'sending',
+      name: myNickname,
+      avatar: myAvatar || getAvatarText(myNickname || '我')
     }
     // 立即插入到消息列表
     if (!messageMap.value[payload.conversationId]) {
@@ -434,10 +439,9 @@ export const useChatStore = defineStore('chat', () => {
     const list = messageMap.value[conversationId]
 
     // AI 回复广播去重：查找本地流式占位消息（非数据库数字 ID）。
-    // 不依赖 content 完全匹配：SSE 流式累积的 content 可能与后端落库的 fullResponse
-    // 存在细微差异（换行符处理、多字节字符跨事件分割等），content 不匹配会导致去重失败，
-    // 发起提问的用户会看到两条 AI 回复（流式占位 + 广播落库消息）。
-    // 由于 streaming 标志阻止并发 AI 请求，同一会话内最多只有一个占位消息。
+    // 多消息回复场景下，后端将 AI 回复按 \n\n 拆分为多条独立消息，
+    // 每段都有对应的 SSE 占位消息（ai_msg_* ID），content 经 trim 后应与广播内容一致。
+    // 已被替换的占位消息（获得 DB 数字 ID 后）不再参与匹配，因此多段可按序正确配对。
     let aiPlaceholderIdx = -1
     if (message.sender === 'ai') {
       // 优先匹配 content 相同的占位消息；找不到时取最后一个占位消息作为兜底

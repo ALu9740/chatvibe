@@ -1125,7 +1125,7 @@ const themeIconName = computed(() => {
               </div>
               <MessageBubble
                 :message="msg"
-                :show-avatar="isGroup || msg.sender === 'ai'"
+                :show-avatar="true"
                 @contextmenu="onMessageContextmenu"
                 @retry="handleRetryMessage"
               />

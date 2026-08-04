@@ -104,9 +104,9 @@ function onRetry() {
     :class="{ self: isSelf, ai: isAI, other: !isSelf && !isAI }"
     @contextmenu="onContextmenu"
   >
-    <!-- 头像（自己消息不显示在左，AI 始终显示紫色头像） -->
+    <!-- 头像（自己消息显示在右侧，AI 始终显示紫色头像，他人显示在左侧） -->
     <div
-      v-if="(showAvatar || isAI) && !isSelf"
+      v-if="showAvatar || isAI"
       class="avatar msg-avatar"
       :class="{ 'size-md': true, 'ai-avatar': isAI }"
       :style="!isAI && !isAvatarImg && message.color ? { background: message.color } : {}"
@@ -115,12 +115,13 @@ function onRetry() {
       <template v-else>{{ avatarText }}</template>
     </div>
 
-    <div class="flex-col" style="max-width: 100%">
-      <!-- 发送者昵称（群聊他人 / AI 助手） -->
+    <div class="flex-col" style="max-width: 100%" :class="{ 'self-col': isSelf }">
+      <!-- 发送者昵称（所有会话类型都展示） -->
       <div
-        v-if="message.name && !isSelf"
+        v-if="message.name"
         class="text-xs text-muted"
         style="margin-bottom: 2px; padding: 0 4px"
+        :class="{ 'text-right': isSelf }"
       >
         {{ message.name }}
       </div>
@@ -182,8 +183,10 @@ function onRetry() {
 <style scoped>
 /* 样式继承自全局 style.scss，组件内不再重复定义 */
 .flex-col { display: flex; flex-direction: column; }
+.flex-col.self-col { align-items: flex-end; }
 .text-xs { font-size: 12px; }
 .text-muted { color: var(--c-text-muted); }
+.text-right { text-align: right; }
 
 /* 文件消息卡片 */
 .msg-file {
