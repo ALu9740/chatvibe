@@ -94,7 +94,7 @@ onUnmounted(() => {
               box-shadow $dur-normal $ease-smooth,
               border-color $dur-normal $ease-smooth;
 
-  /* 滚动时：整体向中间靠拢，背景加深，加阴影 */
+  /* 滚动时：横向向中间靠拢，纵向高度不变，背景加深，加阴影 */
   &.scrolled {
     background: var(--landing-nav-bg-scrolled);
     box-shadow: $shadow-sm;
@@ -102,18 +102,7 @@ onUnmounted(() => {
 
     .landing-nav__inner {
       max-width: 860px;
-      padding: 10px 24px;
-    }
-
-    .nav-logo {
-      .logo-mark {
-        width: 30px;
-        height: 30px;
-      }
-
-      .logo-text {
-        font-size: 17px;
-      }
+      padding: 20px 24px;
     }
   }
 
@@ -127,7 +116,8 @@ onUnmounted(() => {
     justify-content: space-between;
     gap: 24px;
     transition: max-width $dur-normal $ease-smooth,
-                padding $dur-normal $ease-smooth;
+                padding-left $dur-normal $ease-smooth,
+                padding-right $dur-normal $ease-smooth;
   }
 }
 
@@ -143,7 +133,6 @@ onUnmounted(() => {
   font-weight: 700;
   font-size: 20px;
   flex-shrink: 0;
-  transition: font-size $dur-normal $ease-smooth;
 
   .logo-mark {
     width: 36px;
@@ -156,8 +145,6 @@ onUnmounted(() => {
     color: #fff;
     position: relative;
     overflow: hidden;
-    transition: width $dur-normal $ease-smooth,
-                height $dur-normal $ease-smooth;
 
     &::after {
       content: '';

@@ -7,6 +7,7 @@
  */
 import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import ChatMessage, { type ChatMsg } from '@/views/landing/components/ChatMessage.vue'
+import HeroInteractiveBackground from '@/components/HeroInteractiveBackground.vue'
 
 // ============================================================
 // 事件定义
@@ -202,6 +203,11 @@ onUnmounted(() => {
     <div class="hero__inner">
       <!-- ==================== 上侧文案区 ==================== -->
       <div class="hero__top">
+        <!-- 交互式背景：字符矩阵 + 液态光斑拖尾 -->
+        <HeroInteractiveBackground />
+
+        <!-- 内容层（在背景之上） -->
+        <div class="hero__top-content">
         <!-- 版本徽章 -->
         <div class="version-badge">
           <svg
@@ -311,6 +317,8 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+
+        </div><!-- /.hero__top-content -->
       </div>
 
       <!-- ==================== 下侧聊天窗口模拟器 ==================== -->
@@ -415,11 +423,29 @@ onUnmounted(() => {
 // 上侧文案区
 // ============================================================
 .hero__top {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 24px;
+  width: 100%;
+  border-radius: $r-xl;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+// ---- 内容层 ----
+.hero__top-content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 24px;
+  padding: 48px 32px;
+  width: 100%;
 }
 
 // ---- 版本徽章 ----
