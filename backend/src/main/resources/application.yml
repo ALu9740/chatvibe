@@ -15,6 +15,18 @@ spring:
   cache:
     type: caffeine
     cache-names:  userInfo,userEmail,emailExists,userNotifyPrefs
+  ai:
+    openai:
+      # Spring AI 自动配置（单供应商模式 / failover.enabled=false 时使用）
+      # 按 provider 选择 base-url:
+      #   qwen   -> https://dashscope.aliyuncs.com/compatible-mode   (DashScope OpenAI 兼容模式)
+      #   ollama -> http://localhost:11434                            (Ollama OpenAI 兼容端点 /v1/chat/completions)
+      base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
+      api-key: ${AI_API_KEY:dummy}
+      chat:
+        options:
+          model: ${AI_MODEL:qwen3.6-flash}
+          temperature: 0.7
 
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
@@ -39,21 +51,15 @@ jwt:
 
 chatvibe:
   ai:
-    # AI 提供商: qwen（阿里云百炼） | ollama（本地） | openai
-    provider: ${AI_PROVIDER:qwen}
-    ollama:
-      url: ${OLLAMA_URL:http://localhost:11434/api/chat}
-      model: ${OLLAMA_MODEL:deepseek-r1:8b}
-    openai:
-      url: ${AI_API_BASE:https://api.openai.com/v1/chat/completions}
-      api-key: ${AI_API_KEY:}
-      model: ${AI_MODEL:gpt-4o-mini}
-    # 阿里云百炼（DashScope）配置
-    # 获取 API Key: https://bailian.console.aliyun.com/ -> 模型广场 -> API-KEY 管理
-    qwen:
-      url: ${QWEN_API_URL:https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions}
-      api-key: ${QWEN_API_KEY:}
-      model: ${QWEN_MODEL:qwen3.6-max-preview}
+    # AI 提供商: qwen（阿里云百炼） | ollama（本地）
+    # 两者均通过 Spring AI 的 OpenAI 兼容客户端调用，仅 base-url / api-key / model 不同
+    provider: ${AI_PROVIDER:ollama}
+    # 多供应商故障转移配置
+    # enabled=true 时启用 FailoverAiService 责任链，按优先级逐个尝试
+    # enabled=false 时退回单供应商模式（SpringAiChatService）
+    # providers 列表在 application-dev.yml / application-prod.yml 中按环境配置
+    failover:
+      enabled: ${AI_FAILOVER_ENABLED:true}
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:}
@@ -190,6 +196,26 @@ resilience4j:
         timeout-duration: 0
       notifDeleteRateLimiter: # 删除通知限流
         limit-for-period: 60
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      aiConvListRateLimiter: # AI对话列表限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      aiCreateConvRateLimiter: # 创建AI对话限流
+        limit-for-period: 20
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      aiMessagesRateLimiter: # AI历史消息限流
+        limit-for-period: 30
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      aiSendMsgRateLimiter: # 非流式AI对话限流
+        limit-for-period: 10
+        limit-refresh-period: 1m
+        timeout-duration: 0
+      aiDeleteConvRateLimiter: # 删除AI对话限流
+        limit-for-period: 20
         limit-refresh-period: 1m
         timeout-duration: 0
   circuitbreaker:
@@ -545,6 +571,61 @@ resilience4j:
         ignore-exceptions:
           - com.chatvibe.common.exception.BusinessException
       notifDeleteService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      aiConvListService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      aiCreateConvService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      aiMessagesService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      aiSendMsgService:
+        register-health-indicator: true
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        sliding-window-type: COUNT_BASED
+        ignore-exceptions:
+          - com.chatvibe.common.exception.BusinessException
+      aiDeleteConvService:
         register-health-indicator: true
         sliding-window-size: 10
         minimum-number-of-calls: 5

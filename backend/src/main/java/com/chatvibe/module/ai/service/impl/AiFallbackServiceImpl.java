@@ -4,15 +4,18 @@ import cn.hutool.core.util.RandomUtil;
 import com.chatvibe.module.ai.service.AiService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Consumer;
 
 /**
  * AI 兜底服务实现
- * 当主服务(Ollama/OpenAI)不可用时返回兜底回复
- * 始终注册，由 AiConfig 的 @Primary 主服务区分注入
+ * <p>
+ * 当主服务（Spring AI ChatClient）不可用或熔断开启时返回兜底回复。
+ * 始终注册；主服务由 {@code SpringAiChatService} 提供。
+ * <p>
+ * 迁移后返回 {@link Flux}&lt;String&gt;，逐字符模拟流式输出。
  *
  * @author Alu
  * @date 2026-07-01
@@ -34,27 +37,11 @@ public class AiFallbackServiceImpl implements AiService {
     }
 
     @Override
-    public void chatStream(String prompt, Long userId,
-                           List<Map<String, String>> context,
-                           Consumer<String> onToken,
-                           Consumer<Throwable> onError,
-                           Runnable onComplete) {
-        log.warn("[AI][Fallback] 使用兜底回复: userId={}, promptLen={}", userId, prompt.length());
+    public Flux<String> chatStream(String prompt, List<org.springframework.ai.chat.messages.Message> context) {
+        log.warn("[AI][Fallback] 使用兜底回复: promptLen={}", prompt == null ? 0 : prompt.length());
         String reply = FALLBACK_REPLIES[RandomUtil.randomInt(FALLBACK_REPLIES.length)];
-        // 逐字符模拟流式输出
-        Thread simulator = new Thread(() -> {
-            try {
-                for (char c : reply.toCharArray()) {
-                    onToken.accept(String.valueOf(c));
-                    Thread.sleep(30);
-                }
-                onComplete.run();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                onError.accept(e);
-            }
-        }, "ai-fallback-" + userId);
-        simulator.setDaemon(true);
-        simulator.start();
+        // 逐字符模拟流式输出，每 30ms 推送一个字符
+        return Flux.fromStream(reply.chars().mapToObj(c -> String.valueOf((char) c)))
+                .delayElements(Duration.ofMillis(30));
     }
 }

@@ -55,6 +55,16 @@ spring:
             port: 465
           starttls:
             enable: true
+  # Spring AI 单供应商模式配置（仅 failover.enabled=false 时生效）
+  # 开发环境默认指向本地 Ollama，避免误连外部 API
+  # failover.enabled=true 时此配置不生效，由 providerChatClients() 按列表构建
+  ai:
+    openai:
+      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      api-key: dummy
+      chat:
+        options:
+          model: ${OLLAMA_MODEL:deepseek-r1:8b}
 
 logging:
   level:
@@ -65,4 +75,21 @@ logging:
 
 chatvibe:
   ai:
-    provider: ${AI_PROVIDER:ollama}
+    # 开发环境：Ollama 本地为主，Qwen 百炼兜底
+    # 本地 Ollama 无需 API Key、无网络延迟，适合开发调试
+    # Ollama 不可用时自动切换到阿里云百炼 qwen3.7-flash
+    provider: ollama
+    failover:
+      providers:
+        # 优先级 1：本地 Ollama（开发主供应商）
+        - name: ollama
+          base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+          api-key: dummy
+          model: ${OLLAMA_MODEL:deepseek-r1:8b}
+          enabled: true
+        # 优先级 2：阿里云百炼 Qwen（开发兜底供应商）
+        - name: qwen
+          base-url: https://dashscope.aliyuncs.com/compatible-mode
+          api-key: ${QWEN_API_KEY:dummy}
+          model: ${QWEN_MODEL:qwen3.6-flash}
+          enabled: true
