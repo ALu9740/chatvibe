@@ -15,34 +15,36 @@ export const useThemeStore = defineStore('theme', () => {
   const isDark = computed(() => {
     if (mode.value === 'dark') return true
     if (mode.value === 'light') return false
-    // auto：根据当前小时判断
     const hour = new Date().getHours()
     return hour < LIGHT_START || hour >= DARK_START
   })
 
-  /** 应用主题到 document（同时切换 data-theme 属性与 .dark 类）*/
-  function applyTheme() {
+  /** 应用主题到 document */
+  function applyTheme(): void {
     const root = document.documentElement
     root.setAttribute('data-theme', isDark.value ? 'dark' : 'light')
-    // .dark 类启用 Element Plus 官方暗色 css-vars
     root.classList.toggle('dark', isDark.value)
   }
 
   /** 设置主题模式 */
-  function setMode(newMode: ThemeMode) {
+  function setMode(newMode: ThemeMode): void {
     mode.value = newMode
     localStorage.setItem(STORAGE_KEY, newMode)
     applyTheme()
   }
 
-  /** 初始化主题（应用启动时调用） */
-  function initTheme() {
+  /** 在 light / dark 之间直接切换（用于 Switch 组件） */
+  function toggleDark(): void {
+    setMode(isDark.value ? 'light' : 'dark')
+  }
+
+  /** 初始化主题 */
+  function initTheme(): void {
     applyTheme()
-    // auto 模式下每分钟检查是否需要切换
     setInterval(() => {
       if (mode.value === 'auto') applyTheme()
     }, 60000)
   }
 
-  return { mode, isDark, setMode, initTheme }
+  return { mode, isDark, setMode, toggleDark, initTheme }
 })

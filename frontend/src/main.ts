@@ -10,6 +10,7 @@ import App from './App.vue'
 import router from './router'
 import { useThemeStore } from './stores/theme'
 import './style.scss'
+import './styles/landing.scss'
 
 const app = createApp(App)
 

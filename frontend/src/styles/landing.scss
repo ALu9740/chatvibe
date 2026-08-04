@@ -1,0 +1,415 @@
+// ============================================================
+// ChatVibe · Landing 全局样式
+// 玻璃态导航、背景光晕、按钮动效、暗色覆盖、通用区块
+// ============================================================
+
+/* ---------- 字体加载 ---------- */
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ============================================================
+   根变量同步（landing 专用补充）
+   ============================================================ */
+:root {
+  --landing-bg: #{$c-bg};
+  --landing-card: #{$c-card};
+  --landing-text: #{$c-text};
+  --landing-text-soft: #{$c-text-soft};
+  --landing-text-muted: #{$c-text-muted};
+  --landing-border: #{$c-border};
+  --landing-glow-blue: rgba(37, 99, 235, 0.08);
+  --landing-glow-purple: rgba(124, 58, 237, 0.06);
+  --landing-nav-bg: rgba(255, 255, 255, 0.72);
+  --landing-nav-bg-scrolled: rgba(255, 255, 255, 0.88);
+
+  /* 终端 —— 白天主题 */
+  --term-bg: #f8f9fb;
+  --term-bar-bg: #eef0f4;
+  --term-border: rgba(148, 163, 184, 0.15);
+  --term-shadow: 0 24px 60px rgba(15, 23, 42, 0.10);
+  --term-glow-opacity: 0.35;
+  --term-text: #3b4252;
+  --term-prefix: #8b909a;
+  --term-title: #5c6370;
+  --term-cursor: #7c3aed;
+  --term-scrollbar: rgba(124, 58, 237, 0.25);
+  --term-badge-color: #16a34a;
+  --term-badge-bg: rgba(22, 163, 74, 0.10);
+  --term-badge-border: rgba(22, 163, 74, 0.20);
+  --term-log-request: #2563eb;
+  --term-log-detect: #7c3aed;
+  --term-log-route: #0891b2;
+  --term-log-model: #d97706;
+  --term-log-ws: #059669;
+  --term-log-response: #16a34a;
+}
+
+/* ============================================================
+   暗色模式覆盖
+   ============================================================ */
+[data-theme='dark'] {
+  --landing-bg: #{$bg-dark};
+  --landing-card: #{$bg-dark-card};
+  --landing-text: #{$text-dark};
+  --landing-text-soft: #{$text-dark-soft};
+  --landing-text-muted: #64748B;
+  --landing-border: #{$border-dark};
+  --landing-glow-blue: rgba(37, 99, 235, 0.12);
+  --landing-glow-purple: rgba(124, 58, 237, 0.10);
+  --landing-nav-bg: rgba(15, 23, 42, 0.72);
+  --landing-nav-bg-scrolled: rgba(15, 23, 42, 0.90);
+
+  /* 终端 —— 黑夜主题 */
+  --term-bg: #1e1e2e;
+  --term-bar-bg: #181825;
+  --term-border: rgba(148, 163, 184, 0.12);
+  --term-shadow: 0 24px 60px rgba(15, 23, 42, 0.35);
+  --term-glow-opacity: 0.6;
+  --term-text: #CBD5E1;
+  --term-prefix: #64748B;
+  --term-title: #a6adc8;
+  --term-cursor: #a78bfa;
+  --term-scrollbar: rgba(124, 58, 237, 0.3);
+  --term-badge-color: #a6e3a1;
+  --term-badge-bg: rgba(166, 227, 161, 0.12);
+  --term-badge-border: rgba(166, 227, 161, 0.25);
+  --term-log-request: #93C5FD;
+  --term-log-detect: #a78bfa;
+  --term-log-route: #67E8F9;
+  --term-log-model: #FCD34D;
+  --term-log-ws: #6EE7B7;
+  --term-log-response: #86EFAC;
+}
+
+/* ============================================================
+   Landing 容器
+   ============================================================ */
+.landing {
+  font-family: $font-body;
+  background: var(--landing-bg);
+  color: var(--landing-text);
+  overflow-x: clip;
+  position: relative;
+  min-height: 100vh;
+  display: block;
+
+  /* 背景径向渐变光斑 */
+  &::before {
+    content: '';
+    position: fixed;
+    top: -20%;
+    left: -10%;
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(circle, var(--landing-glow-blue) 0%, transparent 70%);
+    border-radius: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  &::after {
+    content: '';
+    position: fixed;
+    bottom: -20%;
+    right: -10%;
+    width: 700px;
+    height: 700px;
+    background: radial-gradient(circle, var(--landing-glow-purple) 0%, transparent 70%);
+    border-radius: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+}
+
+/* 所有 landing 子元素在光斑之上 */
+.landing > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
+   玻璃态导航栏 —— 样式已移至 AppNav.vue scoped style
+   ============================================================ */
+
+/* ============================================================
+   按钮系统
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: $r-full;
+  font-family: $font-body;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all $dur-normal $ease-out-expo;
+  white-space: nowrap;
+
+  &-primary {
+    background: $grad-primary;
+    color: #fff;
+    box-shadow: $shadow-blue;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 36px rgba(37, 99, 235, 0.36);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  &-secondary {
+    background: transparent;
+    color: var(--landing-text);
+    border: 1.5px solid var(--landing-border);
+
+    &:hover {
+      border-color: $c-primary;
+      color: $c-primary;
+      background: rgba(37, 99, 235, 0.04);
+    }
+  }
+
+  &-ai {
+    background: $grad-ai;
+    color: #fff;
+    box-shadow: $shadow-ai;
+
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(124, 58, 237, 0.32);
+    }
+  }
+
+  &-sm {
+    padding: 8px 20px;
+    font-size: 13px;
+  }
+
+  &-lg {
+    padding: 16px 40px;
+    font-size: 16px;
+  }
+}
+
+/* ============================================================
+   通用区块结构
+   ============================================================ */
+.landing-section {
+  max-width: $landing-max-w;
+  margin: 0 auto;
+  padding: $section-py 48px;
+  position: relative;
+}
+
+.section-head {
+  text-align: center;
+  margin-bottom: 64px;
+
+  .section-tag {
+    display: inline-block;
+    padding: 6px 16px;
+    border-radius: $r-full;
+    background: rgba(37, 99, 235, 0.08);
+    color: $c-primary;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+  }
+
+  &.ai-tag .section-tag {
+    background: rgba(124, 58, 237, 0.08);
+    color: $c-ai;
+  }
+
+  h2 {
+    font-family: $font-display;
+    font-size: 42px;
+    font-weight: 700;
+    color: var(--landing-text);
+    margin: 0 0 16px;
+    line-height: 1.2;
+  }
+
+  p {
+    font-size: 17px;
+    color: var(--landing-text-soft);
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+}
+
+/* 渐变文字 */
+.grad-text {
+  background: $grad-brand;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.ai-grad-text {
+  background: $grad-ai;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============================================================
+   滚动锚点偏移
+   ============================================================ */
+[id] {
+  scroll-margin-top: $nav-h + 24px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ============================================================
+   关键帧动画
+   ============================================================ */
+@keyframes shimmer {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes scanLine {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes floatGlow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(124, 58, 237, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(124, 58, 237, 0.35);
+  }
+}
+
+@keyframes flowParticle {
+  0% { left: 0%; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+/* ============================================================
+   Vue TransitionGroup 动画
+   ============================================================ */
+.msg-enter-active {
+  transition: all 0.5s $ease-spring;
+}
+
+.msg-leave-active {
+  transition: all 0.3s $ease-smooth;
+  position: absolute;
+  width: 100%;
+}
+
+.msg-enter-from {
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+}
+
+.msg-leave-to {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+/* 卡片入场动画 */
+.card-stagger-enter-active {
+  transition: all 0.6s $ease-out-expo;
+}
+
+.card-stagger-enter-from {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+/* ============================================================
+   响应式
+   ============================================================ */
+@media (max-width: 1024px) {
+  .landing-section {
+    padding: 60px 24px;
+  }
+
+  .section-head {
+    h2 { font-size: 32px; }
+    p { font-size: 15px; }
+  }
+}
+
+@media (max-width: 640px) {
+  .landing-section {
+    padding: 48px 16px;
+  }
+
+  .section-head {
+    margin-bottom: 40px;
+
+    h2 { font-size: 26px; }
+    p { font-size: 14px; }
+  }
+
+  .btn {
+    padding: 12px 24px;
+    font-size: 14px;
+  }
+}
+
+/* ============================================================
+   暗色模式 - 组件级覆盖
+   ============================================================ */
+[data-theme='dark'] {
+  .landing-section .section-head .section-tag {
+    background: rgba(37, 99, 235, 0.15);
+  }
+
+  .landing-section.ai-tag .section-head .section-tag,
+  .section-head.ai-tag .section-tag {
+    background: rgba(124, 58, 237, 0.15);
+  }
+
+  .btn-secondary {
+    border-color: $border-dark;
+
+    &:hover {
+      background: rgba(124, 58, 237, 0.08);
+    }
+  }
+}
