@@ -5,15 +5,15 @@
 // ============================================================
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getAdminInfo } from '@/api/admin'
+import { useAdminAuthStore } from '@/stores/adminAuth'
 import { useThemeStore } from '@/stores/theme'
-import type { AdminUser, AdminRole } from '@/types/admin'
+import type { AdminRole } from '@/types/admin'
 
 const route = useRoute()
 const router = useRouter()
 const themeStore = useThemeStore()
+const adminAuthStore = useAdminAuthStore()
 
-const admin = ref<AdminUser | null>(null)
 const sidebarCollapsed = ref(false)
 
 /** 侧边栏菜单项 */
@@ -30,6 +30,9 @@ const menuItems = [
 
 /** 当前激活菜单 */
 const activeMenu = computed(() => route.path)
+
+/** 管理员信息（从 store 获取） */
+const admin = computed(() => adminAuthStore.admin)
 
 /** 角色显示文案 */
 const roleText = computed(() => {
@@ -65,8 +68,8 @@ function handleMenuSelect(index: string) {
 
 function handleCommand(cmd: string) {
   if (cmd === 'logout') {
-    localStorage.removeItem('chatvibe_token')
-    router.push('/login')
+    adminAuthStore.logoutLocal()
+    router.push('/admin/login')
   } else if (cmd === 'back') {
     router.push('/chat')
   }
@@ -74,9 +77,11 @@ function handleCommand(cmd: string) {
 
 onMounted(async () => {
   try {
-    admin.value = await getAdminInfo()
+    await adminAuthStore.fetchAdmin()
   } catch {
-    admin.value = null
+    // token 无效或过期，跳转管理员登录页
+    adminAuthStore.logoutLocal()
+    router.push('/admin/login')
   }
 })
 </script>

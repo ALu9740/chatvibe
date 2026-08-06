@@ -2,25 +2,53 @@ import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axio
 import { toast } from '@/utils/toast'
 import type { ApiResponse } from '@/types'
 
-// 从 localStorage 读取 token 的键名
+// C 端用户 token
 const TOKEN_KEY = 'chatvibe_token'
+// 管理员后台 token（与 C 端隔离）
+const ADMIN_TOKEN_KEY = 'chatvibe_admin_token'
 
-/** 获取本地存储的 token */
+// ============================================================
+// C 端 token 存取
+// ============================================================
+
+/** 获取 C 端 token */
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
 }
 
-/** 保存 token */
+/** 保存 C 端 token */
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token)
 }
 
-/** 清除 token */
+/** 清除 C 端 token */
 export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
-// 创建 axios 实例
+// ============================================================
+// 管理员 token 存取
+// ============================================================
+
+/** 获取管理员 token */
+export function getAdminToken(): string | null {
+  return localStorage.getItem(ADMIN_TOKEN_KEY)
+}
+
+/** 保存管理员 token */
+export function setAdminToken(token: string): void {
+  localStorage.setItem(ADMIN_TOKEN_KEY, token)
+}
+
+/** 清除管理员 token */
+export function removeAdminToken(): void {
+  localStorage.removeItem(ADMIN_TOKEN_KEY)
+}
+
+// ============================================================
+// Axios 实例
+// ============================================================
+
 const service: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE,
   timeout: 15000,
@@ -29,12 +57,32 @@ const service: AxiosInstance = axios.create({
   }
 })
 
-// 请求拦截器：自动携带 Bearer token
+/** 判断请求是否为管理员后台接口 */
+function isAdminRequest(url: string | undefined): boolean {
+  return !!url && url.startsWith('/admin/')
+}
+
+/** 判断当前页面是否在管理员后台 */
+function isAdminPage(): boolean {
+  return window.location.pathname.startsWith('/admin')
+}
+
+// 请求拦截器：按请求路径选择对应 token
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = getToken()
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+    const url = config.url
+    if (isAdminRequest(url)) {
+      // 管理员接口使用管理员 token
+      const adminToken = getAdminToken()
+      if (adminToken) {
+        config.headers.Authorization = `Bearer ${adminToken}`
+      }
+    } else {
+      // C 端接口使用 C 端 token
+      const token = getToken()
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`
+      }
     }
     return config
   },
@@ -45,39 +93,48 @@ service.interceptors.request.use(
 service.interceptors.response.use(
   (response) => {
     const res = response.data as ApiResponse
-    console.log('[Response拦截器] url =', response.config.url, '| 原始 data =', response.data)
+    const isAdmin = isAdminRequest(response.config.url) || isAdminPage()
 
     // 非 JSON / 文件流直接返回
     if (!res || typeof res.code === 'undefined') {
-      console.log('[Response拦截器] 非标准 ApiResponse，原样返回')
       return response.data
     }
 
     // code === 200 表示业务成功
     if (res.code === 200) {
-      console.log('[Response拦截器] code=200，返回 res.data =', res.data)
       return res.data
     }
 
-    // 1002 未授权：清除 token 并跳转登录
+    // 1002 未授权：清除对应 token 并跳转登录
     if (res.code === 1002) {
-      removeToken()
-      toast.error('登录已过期', '请重新登录')
-      // 避免在登录页重复跳转
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login'
+      if (isAdmin) {
+        removeAdminToken()
+        toast.error('登录已过期', '请重新登录')
+        if (!window.location.pathname.includes('/admin/login')) {
+          window.location.href = '/admin/login'
+        }
+      } else {
+        removeToken()
+        toast.error('登录已过期', '请重新登录')
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login'
+        }
       }
       return Promise.reject(new Error(res.message || '未授权'))
     }
 
     // 2011 账号在其他设备登录：强制下线
     if (res.code === 2011) {
-      removeToken()
+      if (isAdmin) {
+        removeAdminToken()
+      } else {
+        removeToken()
+      }
       toast.error('账号被强制下线', res.message || '当前账号已在其他设备登录，您已被强制下线')
-      // 避免在登录页重复跳转
-      if (!window.location.pathname.includes('/login')) {
+      const target = isAdmin ? '/admin/login' : '/login'
+      if (!window.location.pathname.includes(target)) {
         setTimeout(() => {
-          window.location.href = '/login'
+          window.location.href = target
         }, 1500)
       }
       return Promise.reject(new Error(res.message || '账号在其他设备登录'))
@@ -85,11 +142,16 @@ service.interceptors.response.use(
 
     // 2009 账号已被封禁：强制下线
     if (res.code === 2009) {
-      removeToken()
+      if (isAdmin) {
+        removeAdminToken()
+      } else {
+        removeToken()
+      }
       toast.error('账号已被封禁', res.message || '账号已被封禁，请联系管理员')
-      if (!window.location.pathname.includes('/login')) {
+      const target = isAdmin ? '/admin/login' : '/login'
+      if (!window.location.pathname.includes(target)) {
         setTimeout(() => {
-          window.location.href = '/login'
+          window.location.href = target
         }, 1500)
       }
       return Promise.reject(new Error(res.message || '账号已被封禁'))
@@ -100,14 +162,29 @@ service.interceptors.response.use(
     return Promise.reject(new Error(res.message || '请求失败'))
   },
   (error) => {
-    // HTTP 错误处理
     const status = error.response?.status
+    const isAdmin = isAdminRequest(error.config?.url) || isAdminPage()
+
     if (status === 401) {
-      removeToken()
-      toast.error('登录已过期', '请重新登录')
-      window.location.href = '/login'
+      if (isAdmin) {
+        removeAdminToken()
+        toast.error('登录已过期', '请重新登录')
+        window.location.href = '/admin/login'
+      } else {
+        removeToken()
+        toast.error('登录已过期', '请重新登录')
+        window.location.href = '/login'
+      }
     } else if (status === 403) {
-      toast.error('无权限', '没有权限执行此操作')
+      if (isAdmin) {
+        removeAdminToken()
+        toast.error('无管理员权限', '该账号无权访问管理后台')
+        setTimeout(() => {
+          window.location.href = '/admin/login'
+        }, 1500)
+      } else {
+        toast.error('无权限', '没有权限执行此操作')
+      }
     } else if (status >= 500) {
       toast.error('服务器异常', '服务器开小差了，请稍后重试')
     } else {
