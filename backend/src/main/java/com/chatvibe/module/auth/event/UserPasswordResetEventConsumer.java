@@ -6,6 +6,7 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import cn.hutool.core.util.StrUtil;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
@@ -39,44 +40,75 @@ public class UserPasswordResetEventConsumer {
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
             helper.setFrom(mailFrom);
             helper.setTo(event.getEmail());
-            helper.setSubject("【ChatVibe】您的密码已重置");
 
             // 获取当前时间字符串
             String timeStr = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
 
-            // 构建新的 HTML 内容
-            String html = """
-                    <!DOCTYPE html>
-                    <html>
-                    <head><meta charset="UTF-8"></head>
-                    <body style="font-family: 'Helvetica Neue', Arial, sans-serif; background:#F7F9FC; padding:24px;">
-                      <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.08);">
-                        <!-- 头部：蓝色渐变背景 -->
-                        <div style="background:linear-gradient(135deg,#1E40AF 0%%,#2563EB 45%%,#0EA5E9 100%%); padding:32px 24px; text-align:center;">
-                          <h1 style="color:#fff; margin:0; font-size:24px; letter-spacing:0.5px;">ChatVibe</h1>
-                          <p style="color:rgba(255,255,255,0.85); font-size:12px; margin:6px 0 0;">让沟通更有温度</p>
-                        </div>
-                        
-                        <!-- 主体内容 -->
-                        <div style="padding:32px 24px;">
-                          <h2 style="color:#0F172A; font-size:18px; margin:0 0 16px;">密码重置通知</h2>
-                          <p style="color:#475569; font-size:14px; line-height:1.6;">您好，您的 ChatVibe 账号密码已成功重置。</p>
-                          <p style="color:#475569; font-size:14px; line-height:1.6;">如果此操作非您本人发起，请立即登录并修改密码，或联系管理员：alu9740@163.com。</p>
-                          <p style="color:#999; font-size:12px; margin-top:24px;">操作时间：%s</p>
-                        </div>
-                        
-                        <!-- 底部：版权信息 -->
-                        <div style="background:#fafafa; padding:16px 24px; text-align:center; border-top:1px solid #eee;">
-                          <p style="color:#bbb; font-size:12px; margin:0;">© ChatVibe · 本邮件由系统自动发送，请勿回复</p>
-                        </div>
-                      </div>
-                    </body>
-                    </html>
-                    """.formatted(timeStr);
+            // 根据 newPassword 是否存在构建不同邮件内容
+            boolean hasNewPassword = StrUtil.isNotBlank(event.getNewPassword());
+            String subject = hasNewPassword ? "【ChatVibe】管理员已为您重置密码" : "【ChatVibe】您的密码已重置";
+            helper.setSubject(subject);
+
+            String html;
+            if (hasNewPassword) {
+                // 管理员重置：邮件中包含新密码
+                html = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head><meta charset="UTF-8"></head>
+                        <body style="font-family: 'Helvetica Neue', Arial, sans-serif; background:#F7F9FC; padding:24px;">
+                          <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.08);">
+                            <div style="background:linear-gradient(135deg,#1E40AF 0%%,#2563EB 45%%,#0EA5E9 100%%); padding:32px 24px; text-align:center;">
+                              <h1 style="color:#fff; margin:0; font-size:24px; letter-spacing:0.5px;">ChatVibe</h1>
+                              <p style="color:rgba(255,255,255,0.85); font-size:12px; margin:6px 0 0;">让沟通更有温度</p>
+                            </div>
+                            <div style="padding:32px 24px;">
+                              <h2 style="color:#0F172A; font-size:18px; margin:0 0 16px;">密码重置通知</h2>
+                              <p style="color:#475569; font-size:14px; line-height:1.6;">您好，管理员已为您重置了 ChatVibe 账号密码。</p>
+                              <div style="background:#F0F4FF; border:1px solid #DBEAFE; border-radius:10px; padding:16px 20px; margin:16px 0;">
+                                <p style="color:#64748B; font-size:12px; margin:0 0 6px;">您的新密码为：</p>
+                                <p style="color:#1D4ED8; font-size:20px; font-weight:700; margin:0; letter-spacing:2px;">%s</p>
+                              </div>
+                              <p style="color:#475569; font-size:14px; line-height:1.6;">请使用新密码登录后，尽快在设置中修改为您自己的密码。</p>
+                              <p style="color:#999; font-size:12px; margin-top:24px;">操作时间：%s</p>
+                            </div>
+                            <div style="background:#fafafa; padding:16px 24px; text-align:center; border-top:1px solid #eee;">
+                              <p style="color:#bbb; font-size:12px; margin:0;">© ChatVibe · 本邮件由系统自动发送，请勿回复</p>
+                            </div>
+                          </div>
+                        </body>
+                        </html>
+                        """.formatted(event.getNewPassword(), timeStr);
+            } else {
+                // C端自主重置：仅通知
+                html = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head><meta charset="UTF-8"></head>
+                        <body style="font-family: 'Helvetica Neue', Arial, sans-serif; background:#F7F9FC; padding:24px;">
+                          <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.08);">
+                            <div style="background:linear-gradient(135deg,#1E40AF 0%%,#2563EB 45%%,#0EA5E9 100%%); padding:32px 24px; text-align:center;">
+                              <h1 style="color:#fff; margin:0; font-size:24px; letter-spacing:0.5px;">ChatVibe</h1>
+                              <p style="color:rgba(255,255,255,0.85); font-size:12px; margin:6px 0 0;">让沟通更有温度</p>
+                            </div>
+                            <div style="padding:32px 24px;">
+                              <h2 style="color:#0F172A; font-size:18px; margin:0 0 16px;">密码重置通知</h2>
+                              <p style="color:#475569; font-size:14px; line-height:1.6;">您好，您的 ChatVibe 账号密码已成功重置。</p>
+                              <p style="color:#475569; font-size:14px; line-height:1.6;">如果此操作非您本人发起，请立即登录并修改密码，或联系管理员：alu9740@163.com。</p>
+                              <p style="color:#999; font-size:12px; margin-top:24px;">操作时间：%s</p>
+                            </div>
+                            <div style="background:#fafafa; padding:16px 24px; text-align:center; border-top:1px solid #eee;">
+                              <p style="color:#bbb; font-size:12px; margin:0;">© ChatVibe · 本邮件由系统自动发送，请勿回复</p>
+                            </div>
+                          </div>
+                        </body>
+                        </html>
+                        """.formatted(timeStr);
+            }
 
             helper.setText(html, true);
             mailSender.send(mimeMessage);
-            log.info("[MQ] 密码重置通知邮件已发送: email={}", event.getEmail());
+            log.info("[MQ] 密码重置通知邮件已发送: email={}, hasNewPassword={}", event.getEmail(), hasNewPassword);
         } catch (MessagingException e) {
             log.error("[MQ] 密码重置通知邮件发送失败: email={}", event.getEmail(), e);
             throw new RuntimeException("密码重置通知邮件发送失败", e);
