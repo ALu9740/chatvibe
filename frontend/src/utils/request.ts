@@ -83,6 +83,18 @@ service.interceptors.response.use(
       return Promise.reject(new Error(res.message || '账号在其他设备登录'))
     }
 
+    // 2009 账号已被封禁：强制下线
+    if (res.code === 2009) {
+      removeToken()
+      toast.error('账号已被封禁', res.message || '账号已被封禁，请联系管理员')
+      if (!window.location.pathname.includes('/login')) {
+        setTimeout(() => {
+          window.location.href = '/login'
+        }, 1500)
+      }
+      return Promise.reject(new Error(res.message || '账号已被封禁'))
+    }
+
     // 其他业务错误
     toast.error('请求失败', res.message || '请稍后重试')
     return Promise.reject(new Error(res.message || '请求失败'))

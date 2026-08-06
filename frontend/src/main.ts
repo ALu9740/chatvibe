@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import 'element-plus/dist/index.css'
 // Element Plus 官方暗色模式 CSS 变量（通过 <html>.dark 类启用，覆盖所有 el-* 组件）
 import 'element-plus/theme-chalk/dark/css-vars.css'
@@ -11,6 +12,7 @@ import router from './router'
 import { useThemeStore } from './stores/theme'
 import './style.scss'
 import './styles/landing.scss'
+import './styles/admin.scss'
 
 const app = createApp(App)
 
@@ -19,7 +21,7 @@ app.use(createPinia())
 // 注册路由
 app.use(router)
 // 注册 Element Plus
-app.use(ElementPlus)
+app.use(ElementPlus, { locale: zhCn })
 
 // 注册所有 Element Plus 图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {

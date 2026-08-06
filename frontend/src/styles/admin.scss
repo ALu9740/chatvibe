@@ -1,0 +1,69 @@
+// ============================================================
+// ChatVibe · 管理后台主题变量
+// 通过 <html>.dark 类自动切换暗色模式
+// 所有 admin 视图组件统一引用这些变量，避免硬编码颜色
+// ============================================================
+
+:root {
+  // 页面背景
+  --admin-page-bg: #F0F2F5;
+  // 卡片 / 面板背景
+  --admin-card-bg: #FFFFFF;
+  // 卡片边框
+  --admin-card-border: #F1F5F9;
+  // 顶部栏背景
+  --admin-header-bg: #FFFFFF;
+  // 悬停背景
+  --admin-hover-bg: #F1F5F9;
+  // 列表项背景（如优先级编辑项）
+  --admin-item-bg: #F8FAFC;
+  --admin-item-border: #E2E8F0;
+  --admin-item-hover-bg: #F1F5F9;
+
+  // 文字层级
+  --admin-text-primary: #0F172A;    // 标题、数值
+  --admin-text-secondary: #475569;  // 正文、次要标题
+  --admin-text-muted: #94A3B8;      // 标签、辅助说明
+  --admin-text-content: #334155;    // 消息内容、操作详情
+  --admin-text-disabled: #CBD5E1;   // 已删除/禁用
+
+  // 分隔线
+  --admin-border: #E2E8F0;
+
+  // 阴影
+  --admin-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --admin-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
+  --admin-shadow-lg: 0 8px 24px rgba(15, 23, 42, 0.1);
+}
+
+html.dark {
+  // 页面背景
+  --admin-page-bg: #0F172A;
+  // 卡片 / 面板背景
+  --admin-card-bg: #1E293B;
+  // 卡片边框
+  --admin-card-border: #334155;
+  // 顶部栏背景
+  --admin-header-bg: #1E293B;
+  // 悬停背景
+  --admin-hover-bg: #334155;
+  // 列表项背景
+  --admin-item-bg: #1E293B;
+  --admin-item-border: #334155;
+  --admin-item-hover-bg: #334155;
+
+  // 文字层级
+  --admin-text-primary: #E2E8F0;
+  --admin-text-secondary: #CBD5E1;
+  --admin-text-muted: #64748B;
+  --admin-text-content: #CBD5E1;
+  --admin-text-disabled: #475569;
+
+  // 分隔线
+  --admin-border: #334155;
+
+  // 阴影（暗色模式阴影更弱）
+  --admin-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --admin-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --admin-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+}

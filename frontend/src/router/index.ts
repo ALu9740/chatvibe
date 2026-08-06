@@ -32,6 +32,63 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/chat/ChatView.vue'),
     meta: { title: '聊天', requiresAuth: true }
   },
+  // 管理员后台
+  // TODO: 后端管理认证接口实现后，将 requiresAuth 改回 true
+  {
+    path: '/admin',
+    component: () => import('@/layouts/AdminLayout.vue'),
+    meta: { title: '管理后台', requiresAuth: false },
+    children: [
+      {
+        path: '',
+        name: 'admin-dashboard',
+        component: () => import('@/views/admin/DashboardView.vue'),
+        meta: { title: '数据概览', requiresAuth: false }
+      },
+      {
+        path: 'users',
+        name: 'admin-users',
+        component: () => import('@/views/admin/UserManageView.vue'),
+        meta: { title: '用户管理', requiresAuth: false }
+      },
+      {
+        path: 'messages',
+        name: 'admin-messages',
+        component: () => import('@/views/admin/MessageAuditView.vue'),
+        meta: { title: '消息审计', requiresAuth: false }
+      },
+      {
+        path: 'groups',
+        name: 'admin-groups',
+        component: () => import('@/views/admin/GroupManageView.vue'),
+        meta: { title: '群组管理', requiresAuth: false }
+      },
+      {
+        path: 'ai',
+        name: 'admin-ai',
+        component: () => import('@/views/admin/AiServiceView.vue'),
+        meta: { title: 'AI 服务', requiresAuth: false }
+      },
+      {
+        path: 'notifications',
+        name: 'admin-notifications',
+        component: () => import('@/views/admin/NotificationView.vue'),
+        meta: { title: '通知公告', requiresAuth: false }
+      },
+      {
+        path: 'config',
+        name: 'admin-config',
+        component: () => import('@/views/admin/SystemConfigView.vue'),
+        meta: { title: '系统配置', requiresAuth: false }
+      },
+      {
+        path: 'logs',
+        name: 'admin-logs',
+        component: () => import('@/views/admin/OperationLogView.vue'),
+        meta: { title: '操作日志', requiresAuth: false }
+      }
+    ]
+  },
   {
     path: '/profile',
     name: 'profile',
@@ -67,7 +124,8 @@ router.beforeEach(async (to, _from, next) => {
     return
   }
   // 已登录但用户信息缺失（页面刷新后 Pinia 状态丢失）→ 拉取用户信息
-  if (authStore.isLoggedIn && !authStore.user) {
+  // 管理后台路由暂不需登录态，跳过拉取避免 token 过期导致重定向
+  if (authStore.isLoggedIn && !authStore.user && to.meta.requiresAuth) {
     try {
       await authStore.fetchUser()
     } catch {
