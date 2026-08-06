@@ -60,7 +60,20 @@ public enum ResultCode {
 
     /* AI 模块 6xxx */
     AI_SERVICE_ERROR(6001, "AI 服务异常"),
-    AI_LIMIT_EXCEEDED(6002, "AI 调用次数超限");
+    AI_LIMIT_EXCEEDED(6002, "AI 调用次数超限"),
+
+    /* 管理员模块 7xxx */
+    ADMIN_ACCESS_DENIED(7001, "无管理员权限"),
+    USER_ALREADY_BANNED(7002, "用户已被封禁"),
+    USER_NOT_BANNED(7003, "用户未被封禁"),
+    ANNOUNCEMENT_NOT_FOUND(7004, "公告不存在"),
+    ANNOUNCEMENT_ALREADY_WITHDRAWN(7005, "公告已撤回"),
+    AI_PROVIDER_NOT_FOUND(7006, "AI 供应商不存在"),
+    AI_PROVIDER_NAME_EXISTS(7007, "供应商名称已存在"),
+    AI_PROVIDER_TEST_FAILED(7008, "供应商连接测试失败"),
+    CONFIG_NOT_FOUND(7009, "系统配置不存在"),
+    CANNOT_BAN_ADMIN(7010, "不能封禁管理员账号"),
+    CANNOT_CHANGE_OWN_ROLE(7011, "不能修改自己的角色");
 
     private final Integer code;
     private final String message;

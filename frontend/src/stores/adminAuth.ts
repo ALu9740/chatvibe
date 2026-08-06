@@ -21,8 +21,9 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
   /** 登录（调用 C 端同一登录接口，但 token 存入管理员独立键） */
   async function login(payload: LoginRequest): Promise<void> {
     const result = await authApi.login(payload)
-    // 校验是否为管理员角色
-    if (!result.user.role || result.user.role !== 'ADMIN') {
+    // 校验是否为管理角色 (SUPER_ADMIN / ADMIN / OPERATOR)
+    const adminRoles = ['SUPER_ADMIN', 'ADMIN', 'OPERATOR']
+    if (!result.user.role || !adminRoles.includes(result.user.role)) {
       throw new Error('该账号无管理员权限')
     }
     token.value = result.accessToken

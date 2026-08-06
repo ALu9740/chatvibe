@@ -81,6 +81,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(WHITELIST).permitAll()
+                        // 管理员后台接口需要管理角色 (SUPER_ADMIN / ADMIN / OPERATOR)
+                        .requestMatchers("/api/admin/**").hasAnyRole("SUPER_ADMIN", "ADMIN", "OPERATOR")
                         .anyRequest().authenticated()
                 )
                 // 添加 JWT 过滤器

@@ -153,6 +153,12 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCode.EMAIL_OR_PASSWORD_ERROR);
         }
 
+        // 3.5 封禁检查
+        if (user.getBanned() != null && user.getBanned() == 1) {
+            String reason = user.getBanReason() != null ? user.getBanReason() : "账号已被封禁";
+            throw new BusinessException(ResultCode.ACCOUNT_DISABLED, "账号已被封禁: " + reason);
+        }
+
         // 4. 登录成功，清除失败计数
         stringRedisTemplate.delete(LOGIN_FAIL_PREFIX + email);
 

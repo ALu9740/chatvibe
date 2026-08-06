@@ -47,7 +47,7 @@ public class User extends BaseEntity {
     private Integer status;
 
     /**
-     * 角色: USER/ADMIN
+     * 角色: USER/OPERATOR/ADMIN/SUPER_ADMIN
      */
     private String role;
 
@@ -70,4 +70,14 @@ public class User extends BaseEntity {
      * 登录版本号：每次登录递增，旧 Token 携带的版本号不匹配时强制下线（多设备登录冲突处理）
      */
     private Integer loginVersion;
+
+    /**
+     * 是否被封禁: 0-正常 1-封禁
+     */
+    private Integer banned;
+
+    /**
+     * 封禁原因
+     */
+    private String banReason;
 }

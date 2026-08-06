@@ -61,6 +61,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                     // 校验登录版本号：不匹配说明账号已在其他设备登录，强制下线
                     if (userDetails instanceof LoginUser loginUser) {
+                        // 封禁检查：用户被封禁后立即踢下线
+                        if (loginUser.getBanned() != null && loginUser.getBanned() == 1) {
+                            log.info("[JWT] 账号已被封禁，强制下线: userId={}", loginUser.getId());
+                            try {
+                                userService.updateStatus(loginUser.getId(), 0);
+                            } catch (Exception ignored) {
+                            }
+                            writeBannedResponse(response);
+                            return;
+                        }
+
                         Integer tokenVersion = jwtUtil.getLoginVersionFromToken(token);
                         Integer currentVersion = loginUser.getLoginVersion();
                         if (currentVersion != null && !currentVersion.equals(tokenVersion)) {
@@ -113,6 +124,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         Result<Void> result = Result.error(ResultCode.ACCOUNT_LOGIN_ELSEWHERE);
+        response.getWriter().write(objectMapper.writeValueAsString(result));
+    }
+
+    /**
+     * 写入"账号已被封禁"的 401 响应
+     */
+    private void writeBannedResponse(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        Result<Void> result = Result.error(ResultCode.ACCOUNT_DISABLED, "账号已被封禁");
         response.getWriter().write(objectMapper.writeValueAsString(result));
     }
 

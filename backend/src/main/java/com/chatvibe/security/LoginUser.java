@@ -29,6 +29,8 @@ public class LoginUser implements UserDetails {
     private boolean enabled;
     /** 登录版本号（用于多设备登录冲突检测） */
     private Integer loginVersion;
+    /** 是否被封禁: 0-正常 1-封禁 */
+    private Integer banned;
 
     public LoginUser() {
     }
@@ -42,6 +44,7 @@ public class LoginUser implements UserDetails {
         this.role = user.getRole();
         this.enabled = true;
         this.loginVersion = user.getLoginVersion() != null ? user.getLoginVersion() : 0;
+        this.banned = user.getBanned() != null ? user.getBanned() : 0;
     }
 
     @Override
