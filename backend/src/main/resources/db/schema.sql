@@ -21,11 +21,13 @@ CREATE TABLE `user` (
     `avatar`          VARCHAR(500)             DEFAULT NULL COMMENT '头像URL',
     `bio`             VARCHAR(255)             DEFAULT NULL COMMENT '个人简介',
     `status`          TINYINT         NOT NULL DEFAULT 0 COMMENT '状态: 0-离线 1-在线 2-忙碌 3-离开',
-    `role`            VARCHAR(20)     NOT NULL DEFAULT 'USER' COMMENT '角色: USER/ADMIN',
+    `role`            VARCHAR(20)     NOT NULL DEFAULT 'USER' COMMENT '角色: USER-普通用户 OPERATOR-运营员 ADMIN-管理员 SUPER_ADMIN-超级管理员',
     `notify_desktop`  TINYINT         NOT NULL DEFAULT 1 COMMENT '桌面通知: 0-关闭 1-开启',
     `notify_sound`    TINYINT         NOT NULL DEFAULT 1 COMMENT '声音通知: 0-关闭 1-开启',
     `notify_ai_alert` TINYINT         NOT NULL DEFAULT 0 COMMENT 'AI消息提醒: 0-关闭 1-开启',
     `login_version`   INT             NOT NULL DEFAULT 0 COMMENT '登录版本号: 每次登录递增,用于多设备登录冲突处理',
+    `banned`          TINYINT         NOT NULL DEFAULT 0 COMMENT '是否被封禁: 0-正常 1-封禁',
+    `ban_reason`      VARCHAR(255)             DEFAULT NULL COMMENT '封禁原因',
     `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted`         TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
@@ -200,3 +202,83 @@ CREATE TABLE `notification` (
     KEY `idx_user_read` (`user_id`, `is_read`, `deleted`),
     KEY `idx_user_created` (`user_id`, `created_at` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='消息通知表';
+
+-- ------------------------------------------------------------
+-- 操作日志表 (管理员操作审计)
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `operation_log`;
+CREATE TABLE `operation_log` (
+    `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `operator_id`     BIGINT UNSIGNED NOT NULL COMMENT '操作者ID',
+    `operator_email`  VARCHAR(255)    NOT NULL COMMENT '操作者邮箱',
+    `type`            VARCHAR(50)     NOT NULL COMMENT '操作类型: LOGIN/USER_BAN/USER_UNBAN/ROLE_CHANGE/PASSWORD_RESET/MESSAGE_DELETE/GROUP_DISSOLVE/GROUP_TRANSFER/ANNOUNCEMENT_PUBLISH/ANNOUNCEMENT_WITHDRAW/RATE_LIMIT_CONFIG/CIRCUIT_BREAKER_CONFIG/CACHE_CLEAR/ADMIN_ACCOUNT_MANAGE',
+    `detail`          VARCHAR(500)             DEFAULT NULL COMMENT '操作详情',
+    `ip`              VARCHAR(50)              DEFAULT NULL COMMENT '操作IP',
+    `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted`         TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_operator` (`operator_id`),
+    KEY `idx_type` (`type`),
+    KEY `idx_created` (`created_at` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='操作日志表';
+
+-- ------------------------------------------------------------
+-- 公告表 (管理员发布系统公告)
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `announcement`;
+CREATE TABLE `announcement` (
+    `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `title`        VARCHAR(200)    NOT NULL COMMENT '公告标题',
+    `content`      TEXT            NOT NULL COMMENT '公告内容',
+    `scope`        VARCHAR(20)     NOT NULL DEFAULT 'all' COMMENT '范围: all-全部用户 specified-指定用户',
+    `target_count` INT             NOT NULL DEFAULT 0 COMMENT '目标用户数',
+    `status`       VARCHAR(20)     NOT NULL DEFAULT 'published' COMMENT '状态: published-已发布 withdrawn-已撤回',
+    `created_by`   VARCHAR(255)    NOT NULL COMMENT '创建者邮箱',
+    `created_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted`      TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_created` (`created_at` DESC)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='公告表';
+
+-- ------------------------------------------------------------
+-- AI 供应商配置表 (管理员后台动态管理 AI 服务供应商)
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `ai_provider`;
+CREATE TABLE `ai_provider` (
+    `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `name`          VARCHAR(50)     NOT NULL COMMENT '供应商标识(如 qwen/openai/ollama)',
+    `type`          VARCHAR(20)     NOT NULL DEFAULT 'cloud' COMMENT '类型: local-本地 cloud-云端',
+    `model`         VARCHAR(100)    NOT NULL COMMENT '模型名',
+    `base_url`      VARCHAR(500)    NOT NULL COMMENT 'API base-url',
+    `api_key`       VARCHAR(500)             DEFAULT NULL COMMENT 'API密钥(local 可为空)',
+    `status`        VARCHAR(20)     NOT NULL DEFAULT 'offline' COMMENT '状态: online/offline/checking',
+    `latency`       INT             NOT NULL DEFAULT 0 COMMENT '最近一次测试延迟(ms)',
+    `priority_dev`  INT             NOT NULL DEFAULT 0 COMMENT '开发环境故障转移优先级(数字越小优先级越高)',
+    `priority_prod` INT             NOT NULL DEFAULT 0 COMMENT '生产环境故障转移优先级',
+    `enabled`       TINYINT         NOT NULL DEFAULT 1 COMMENT '是否启用: 0-禁用 1-启用',
+    `created_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted`       TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='AI供应商配置表';
+
+-- ------------------------------------------------------------
+-- 系统配置表 (管理员后台动态管理系统参数: 限流/熔断/邮件等)
+-- ------------------------------------------------------------
+DROP TABLE IF EXISTS `system_config`;
+CREATE TABLE `system_config` (
+    `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `config_key`  VARCHAR(100)    NOT NULL COMMENT '配置键',
+    `config_value` TEXT           NOT NULL COMMENT '配置值(JSON)',
+    `description` VARCHAR(255)             DEFAULT NULL COMMENT '配置描述',
+    `updated_by`  VARCHAR(255)             DEFAULT NULL COMMENT '最后更新者邮箱',
+    `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted`     TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_config_key` (`config_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统配置表';
