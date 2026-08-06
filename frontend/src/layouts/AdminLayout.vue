@@ -7,6 +7,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAdminAuthStore } from '@/stores/adminAuth'
 import { useThemeStore } from '@/stores/theme'
+import { isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import type { AdminRole } from '@/types/admin'
 
 const route = useRoute()
@@ -165,8 +166,8 @@ onMounted(async () => {
           <!-- 管理员信息 -->
           <el-dropdown trigger="click" @command="handleCommand">
             <div class="admin-info">
-              <el-avatar :size="32" class="admin-avatar">
-                {{ admin?.nickname?.charAt(0) || 'A' }}
+              <el-avatar :size="32" class="admin-avatar" :src="isAvatarUrl(admin?.avatar) ? resolveUploadUrl(admin?.avatar) : undefined">
+                {{ isAvatarUrl(admin?.avatar) ? '' : (admin?.nickname?.charAt(0) || 'A') }}
               </el-avatar>
               <div class="admin-detail">
                 <span class="admin-name">{{ admin?.nickname || '管理员' }}</span>

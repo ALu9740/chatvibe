@@ -7,6 +7,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getUserList, banUser, unbanUser, changeUserRole, resetUserPassword } from '@/api/admin'
+import { isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import type { SystemUser, UserQueryParams, UserStatus, UserRole } from '@/types/admin'
 import type { PageResult } from '@/types'
 
@@ -212,7 +213,7 @@ onMounted(() => {
         <el-table-column label="用户" min-width="160">
           <template #default="{ row }">
             <div class="user-cell">
-              <el-avatar :size="32" class="user-avatar">{{ row.nickname?.charAt(0) }}</el-avatar>
+              <el-avatar :size="32" class="user-avatar" :src="isAvatarUrl(row.avatar) ? resolveUploadUrl(row.avatar) : undefined">{{ isAvatarUrl(row.avatar) ? '' : row.nickname?.charAt(0) }}</el-avatar>
               <div class="user-info">
                 <span class="user-name">{{ row.nickname }}</span>
                 <span class="user-email">{{ row.email }}</span>
