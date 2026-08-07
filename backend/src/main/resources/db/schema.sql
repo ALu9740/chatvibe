@@ -194,15 +194,17 @@ CREATE TABLE `notification` (
     `user_id`    BIGINT UNSIGNED NOT NULL COMMENT '接收通知的用户ID',
     `type`       TINYINT         NOT NULL COMMENT '通知类型: 1-系统消息 2-好友请求 3-好友接受 4-好友删除 5-群邀请 6-被移除群 7-群解散 8-群转让',
     `title`      VARCHAR(100)    NOT NULL COMMENT '通知标题',
-    `content`    VARCHAR(500)             DEFAULT NULL COMMENT '通知内容',
-    `extra`      TEXT                     DEFAULT NULL COMMENT '附加数据JSON: 群邀请含成员列表等',
-    `is_read`    TINYINT         NOT NULL DEFAULT 0 COMMENT '是否已读: 0-未读 1-已读',
-    `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    `deleted`    TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
+    `content`    TEXT                     DEFAULT NULL COMMENT '通知内容(支持公告长文本)',
+    `extra`            TEXT                     DEFAULT NULL COMMENT '附加数据JSON: 群邀请含成员列表等',
+    `announcement_id`  BIGINT UNSIGNED          DEFAULT NULL COMMENT '关联公告ID(系统通知type=1时填写)',
+    `is_read`          TINYINT         NOT NULL DEFAULT 0 COMMENT '是否已读: 0-未读 1-已读',
+    `created_at`       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at`       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted`          TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
     PRIMARY KEY (`id`),
     KEY `idx_user_read` (`user_id`, `is_read`, `deleted`),
-    KEY `idx_user_created` (`user_id`, `created_at` DESC)
+    KEY `idx_user_created` (`user_id`, `created_at` DESC),
+    KEY `idx_announcement` (`announcement_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='消息通知表';
 
 -- ------------------------------------------------------------
@@ -231,7 +233,7 @@ CREATE TABLE `operation_log` (
 DROP TABLE IF EXISTS `announcement`;
 CREATE TABLE `announcement` (
     `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `title`        VARCHAR(200)    NOT NULL COMMENT '公告标题',
+    `title`        VARCHAR(100)    NOT NULL COMMENT '公告标题',
     `content`      TEXT            NOT NULL COMMENT '公告内容',
     `scope`        VARCHAR(20)     NOT NULL DEFAULT 'all' COMMENT '范围: all-全部用户 specified-指定用户',
     `target_count` INT             NOT NULL DEFAULT 0 COMMENT '目标用户数',

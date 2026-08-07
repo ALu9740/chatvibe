@@ -43,6 +43,11 @@ public class Notification extends BaseEntity {
     private String extra;
 
     /**
+     * 关联公告ID(系统通知type=1时填写，用于公告撤回时批量删除关联通知)
+     */
+    private Long announcementId;
+
+    /**
      * 是否已读: 0-未读 1-已读
      */
     @TableField("is_read")
