@@ -115,10 +115,6 @@ export function dissolveGroup(groupId: number, reason: string): Promise<boolean>
   return request.post<unknown, boolean>(`/admin/groups/${groupId}/dissolve`, { reason })
 }
 
-export function transferGroupOwner(groupId: number, newOwnerId: number): Promise<boolean> {
-  return request.post<unknown, boolean>(`/admin/groups/${groupId}/transfer`, { newOwnerId })
-}
-
 // ============================================================
 // AI 服务管理
 // ============================================================

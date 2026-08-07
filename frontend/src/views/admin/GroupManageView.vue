@@ -2,11 +2,12 @@
 // ============================================================
 // ChatVibe · 管理员后台 - 群组管理
 // 对应 PRD 5.6 群组管理
-// 功能：群组列表检索、解散群组、转让群主
+// 功能：群组列表检索、解散群组
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { getGroupList, dissolveGroup, transferGroupOwner } from '@/api/admin'
+import { ElMessage } from 'element-plus'
+import { getGroupList, dissolveGroup } from '@/api/admin'
+import { isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import type { SystemGroup, GroupQueryParams, GroupStatus } from '@/types/admin'
 import type { PageResult } from '@/types'
 
@@ -33,14 +34,6 @@ const dissolveForm = reactive({
   groupId: 0,
   groupName: '',
   reason: ''
-})
-
-// 转让对话框
-const transferDialogVisible = ref(false)
-const transferForm = reactive({
-  groupId: 0,
-  groupName: '',
-  newOwnerId: ''
 })
 
 async function loadData() {
@@ -102,34 +95,6 @@ async function confirmDissolve() {
   }
 }
 
-function openTransferDialog(row: SystemGroup) {
-  transferForm.groupId = row.id
-  transferForm.groupName = row.name
-  transferForm.newOwnerId = ''
-  transferDialogVisible.value = true
-}
-
-async function confirmTransfer() {
-  const newId = Number(transferForm.newOwnerId)
-  if (!newId || newId <= 0) {
-    ElMessage.warning('请输入有效的用户ID')
-    return
-  }
-  try {
-    await ElMessageBox.confirm(
-      `确定将群组"${transferForm.groupName}"的群主转让给用户ID ${newId} 吗？`,
-      '转让确认',
-      { type: 'warning' }
-    )
-    await transferGroupOwner(transferForm.groupId, newId)
-    ElMessage.success('群主已转让')
-    transferDialogVisible.value = false
-    loadData()
-  } catch {
-    // 用户取消或操作失败
-  }
-}
-
 onMounted(() => {
   loadData()
 })
@@ -171,9 +136,7 @@ onMounted(() => {
         <el-table-column label="群组名称" min-width="160">
           <template #default="{ row }">
             <div class="group-cell">
-              <el-avatar :size="32" class="group-avatar">
-                <el-icon><UserFilled /></el-icon>
-              </el-avatar>
+              <el-avatar :size="32" class="group-avatar" :src="isAvatarUrl(row.avatar) ? resolveUploadUrl(row.avatar) : undefined">{{ isAvatarUrl(row.avatar) ? '' : row.name?.charAt(0) }}</el-avatar>
               <span class="group-name">{{ row.name }}</span>
             </div>
           </template>
@@ -198,15 +161,8 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="创建时间" prop="createdAt" width="160" />
         <el-table-column label="最后消息" prop="lastMessageAt" width="160" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="100" fixed="right">
           <template #default="{ row }">
-            <el-button
-              v-if="row.status === 'normal'"
-              type="primary"
-              size="small"
-              link
-              @click="openTransferDialog(row)"
-            >转让群主</el-button>
             <el-button
               v-if="row.status === 'normal'"
               type="danger"
@@ -244,22 +200,6 @@ onMounted(() => {
       <template #footer>
         <el-button @click="dissolveDialogVisible = false">取消</el-button>
         <el-button type="danger" @click="confirmDissolve">确认解散</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 转让对话框 -->
-    <el-dialog v-model="transferDialogVisible" title="转让群主" width="440px">
-      <el-form :model="transferForm" label-width="80px">
-        <el-form-item label="群组">
-          <span style="font-weight: 600">{{ transferForm.groupName }}</span>
-        </el-form-item>
-        <el-form-item label="新群主ID">
-          <el-input v-model="transferForm.newOwnerId" placeholder="输入新群主的用户ID" style="width: 200px" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="transferDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmTransfer">确认转让</el-button>
       </template>
     </el-dialog>
   </div>
