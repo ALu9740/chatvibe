@@ -22,6 +22,7 @@ import type {
   SaveAiProviderRequest,
   FailoverConfig,
   AiConversationRecord,
+  AiConversationMessage,
   Announcement,
   CreateAnnouncementRequest,
   RateLimiterConfig,
@@ -147,8 +148,19 @@ export function updateFailoverConfig(config: FailoverConfig): Promise<boolean> {
   return request.put<unknown, boolean>('/admin/ai/failover', config)
 }
 
-export function getAiConversations(page = 1, size = 20): Promise<PageResult<AiConversationRecord>> {
-  return request.get<unknown, PageResult<AiConversationRecord>>('/admin/ai/conversations', { params: { page, size } })
+export function getAiConversations(
+  page = 1,
+  size = 20,
+  search?: string,
+  provider?: string
+): Promise<PageResult<AiConversationRecord>> {
+  return request.get<unknown, PageResult<AiConversationRecord>>('/admin/ai/conversations', {
+    params: { page, size, search, provider }
+  })
+}
+
+export function getAiConversationMessages(conversationId: number): Promise<AiConversationMessage[]> {
+  return request.get<unknown, AiConversationMessage[]>(`/admin/ai/conversations/${conversationId}/messages`)
 }
 
 // ============================================================

@@ -38,7 +38,11 @@ const typeOptions: { label: string; value: OperationType }[] = [
   { label: '限流配置', value: 'RATE_LIMIT_CONFIG' },
   { label: '熔断配置', value: 'CIRCUIT_BREAKER_CONFIG' },
   { label: '清除缓存', value: 'CACHE_CLEAR' },
-  { label: '管理员账号管理', value: 'ADMIN_ACCOUNT_MANAGE' }
+  { label: '管理员账号管理', value: 'ADMIN_ACCOUNT_MANAGE' },
+  { label: '添加AI供应商', value: 'AI_PROVIDER_ADD' },
+  { label: '更新AI供应商', value: 'AI_PROVIDER_UPDATE' },
+  { label: '删除AI供应商', value: 'AI_PROVIDER_DELETE' },
+  { label: '故障转移配置', value: 'FAILOVER_CONFIG' }
 ]
 
 const typeTextMap: Record<OperationType, string> = {
@@ -56,7 +60,12 @@ const typeTextMap: Record<OperationType, string> = {
   RATE_LIMIT_CONFIG: '限流配置',
   CIRCUIT_BREAKER_CONFIG: '熔断配置',
   CACHE_CLEAR: '清除缓存',
-  ADMIN_ACCOUNT_MANAGE: '管理员账号管理'
+  ADMIN_ACCOUNT_MANAGE: '管理员账号管理',
+  AI_PROVIDER_ADD: '添加AI供应商',
+  AI_PROVIDER_UPDATE: '更新AI供应商',
+  AI_PROVIDER_DELETE: '删除AI供应商',
+  AI_PROVIDER_MANAGE: 'AI供应商管理',
+  FAILOVER_CONFIG: '故障转移配置'
 }
 
 const typeTagType: Record<OperationType, string> = {
@@ -74,7 +83,12 @@ const typeTagType: Record<OperationType, string> = {
   RATE_LIMIT_CONFIG: 'warning',
   CIRCUIT_BREAKER_CONFIG: 'warning',
   CACHE_CLEAR: 'info',
-  ADMIN_ACCOUNT_MANAGE: 'danger'
+  ADMIN_ACCOUNT_MANAGE: 'danger',
+  AI_PROVIDER_ADD: 'primary',
+  AI_PROVIDER_UPDATE: 'warning',
+  AI_PROVIDER_DELETE: 'danger',
+  AI_PROVIDER_MANAGE: 'primary',
+  FAILOVER_CONFIG: 'warning'
 }
 
 async function loadData() {

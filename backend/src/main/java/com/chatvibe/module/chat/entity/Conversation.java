@@ -70,4 +70,14 @@ public class Conversation extends BaseEntity {
      * 仅群聊有效；解散后成员保留会话但禁言，需手动删除会话
      */
     private Integer dissolved;
+
+    /**
+     * AI供应商(最后一次使用的)
+     */
+    private String aiProvider;
+
+    /**
+     * AI模型(最后一次使用的)
+     */
+    private String aiModel;
 }

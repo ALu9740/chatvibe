@@ -78,6 +78,7 @@ public class AiController {
     private final StringRedisTemplate stringRedisTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final AICiruitBreakerService aiCiruitBreakerService;
+    private final com.chatvibe.config.AiProviderRegistry aiProviderRegistry;
 
     // ============================================================
     // SSE 流式对话
@@ -112,6 +113,16 @@ public class AiController {
         // 构建上下文消息列表（Spring AI Message 形式，从会话历史消息中提取，排除当前提问）
         List<org.springframework.ai.chat.messages.Message> contextMessages =
                 buildContextFromMessages(chatConvId, userId, dto.getPrompt());
+
+        // 记录当前使用的供应商和模型到会话（管理员后台可按供应商筛选）
+        // chatConvId 是 conversation 表的会话 ID（type=3 AI会话），直接更新该表的 aiProvider/aiModel 字段
+        if (chatConvId != null && !aiProviderRegistry.getProviders().isEmpty()) {
+            var primary = aiProviderRegistry.getProviders().get(0);
+            conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
+                    .eq(Conversation::getId, chatConvId)
+                    .set(Conversation::getAiProvider, primary.name())
+                    .set(Conversation::getAiModel, primary.model()));
+        }
 
         // 通过熔断器调用 AI 服务，返回 Flux<String>，订阅后桥接到 SseEmitter
         // onErrorResume 确保熔断器未触发降级时（如失败次数未达阈值），
@@ -252,7 +263,14 @@ public class AiController {
         AiConversation conv = new AiConversation();
         conv.setUserId(userId);
         conv.setTitle(StrUtil.isNotBlank(dto == null ? null : dto.getTitle()) ? dto.getTitle() : "AI 对话");
-        conv.setProvider(aiService.getProvider());
+        // 记录创建时的供应商和模型（管理员后台可按供应商筛选）
+        if (!aiProviderRegistry.getProviders().isEmpty()) {
+            var primary = aiProviderRegistry.getProviders().get(0);
+            conv.setProvider(primary.name());
+            conv.setModel(primary.model());
+        } else {
+            conv.setProvider(aiService.getProvider());
+        }
         aiConversationMapper.insert(conv);
         log.info("[AI] 创建新对话: convId={}, userId={}", conv.getId(), userId);
         return Result.success(toVO(conv));
@@ -342,8 +360,13 @@ public class AiController {
                 new UserMessage(dto.getContent()),
                 new AssistantMessage(aiReply)
         ));
-        // 同步 lastPrompt（便于排查）
+        // 同步 lastPrompt + 记录当前使用的供应商和模型（管理员后台可按供应商筛选）
         conv.setLastPrompt(dto.getContent());
+        if (!aiProviderRegistry.getProviders().isEmpty()) {
+            var primary = aiProviderRegistry.getProviders().get(0);
+            conv.setProvider(primary.name());
+            conv.setModel(primary.model());
+        }
         aiConversationMapper.updateById(conv);
 
         return Result.success(aiMsg);

@@ -71,24 +71,3 @@ logging:
     rollingpolicy:
       max-file-size: 10MB
       max-history: 7
-
-chatvibe:
-  ai:
-    # 生产环境：阿里云百炼 qwen3.6-flash 为主，本地 Ollama 兜底
-    # qwen3.6-flash 响应快、成本低，适合生产高频调用
-    # 百炼不可用时自动切换到本地 Ollama deepseek-r1:8b
-    provider: qwen
-    failover:
-      providers:
-        # 优先级 1：阿里云百炼 Qwen（生产主供应商）
-        - name: qwen
-          base-url: https://dashscope.aliyuncs.com/compatible-mode
-          api-key: ${QWEN_API_KEY}
-          model: ${QWEN_MODEL:qwen3.6-flash}
-          enabled: true
-        # 优先级 2：本地 Ollama（生产兜底供应商）
-        - name: ollama
-          base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-          api-key: dummy
-          model: ${OLLAMA_MODEL:deepseek-r1:8b}
-          enabled: true
