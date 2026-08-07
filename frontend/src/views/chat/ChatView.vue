@@ -18,7 +18,7 @@ import * as friendApi from '@/api/friend'
 import * as groupApi from '@/api/group'
 import * as userApi from '@/api/user'
 import { uploadFile } from '@/api/file'
-import type { Conversation, Friend, FriendRequest, GroupMember, Message } from '@/types'
+import type { Conversation, Friend, FriendRequest, GroupMember, Message, NotificationItem } from '@/types'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -901,16 +901,23 @@ function goLanding() {
 
 // === 消息通知 ===
 const notifPanelVisible = ref(false)
+const notifDetailVisible = ref(false)
+const selectedNotification = ref<NotificationItem | null>(null)
 
 async function toggleNotifPanel() {
   notifPanelVisible.value = !notifPanelVisible.value
-  if (notifPanelVisible.value && notificationStore.notifications.length === 0) {
+  if (notifPanelVisible.value) {
     await notificationStore.fetchList()
   }
 }
 
-async function handleNotifRead(id: string) {
-  await notificationStore.markAsRead(id)
+async function handleNotifClick(item: NotificationItem) {
+  selectedNotification.value = item
+  notifDetailVisible.value = true
+  notifPanelVisible.value = false
+  if (!item.isRead) {
+    await notificationStore.markAsRead(item.id)
+  }
 }
 
 async function handleNotifReadAll() {
@@ -992,10 +999,12 @@ const themeIconName = computed(() => {
                 <div class="notif-panel-body">
                   <div v-if="notificationStore.notifications.length === 0" class="notif-empty">暂无通知</div>
                   <div v-for="item in notificationStore.notifications" :key="item.id" class="notif-item" :class="{ unread: !item.isRead }">
-                    <div class="notif-item-main" @click="!item.isRead && handleNotifRead(item.id)">
+                    <div class="notif-item-main" @click="handleNotifClick(item)">
                       <div class="notif-item-title">{{ item.title }}</div>
-                      <div class="notif-item-content">{{ item.content }}</div>
-                      <div class="notif-item-time">{{ formatNotifTime(item.createdAt) }}</div>
+                      <div class="notif-item-meta">
+                        <span class="notif-item-type">{{ item.typeDesc }}</span>
+                        <span class="notif-item-time">{{ formatNotifTime(item.createdAt) }}</span>
+                      </div>
                     </div>
                     <button class="notif-item-delete" @click.stop="handleNotifDelete(item.id)" title="删除">
                       <el-icon size="14"><Close /></el-icon>
@@ -1713,6 +1722,25 @@ const themeIconName = computed(() => {
       </div>
     </template>
   </div>
+
+  <!-- 通知详情弹框 -->
+  <Teleport to="body">
+    <Transition name="notif-detail">
+      <div v-if="notifDetailVisible" class="notif-detail-overlay" @click="notifDetailVisible = false">
+        <div class="notif-detail-dialog" @click.stop>
+          <div class="notif-detail-header">
+            <span class="notif-detail-type-tag">{{ selectedNotification?.typeDesc }}</span>
+            <button class="notif-detail-close" @click="notifDetailVisible = false">
+              <el-icon size="18"><Close /></el-icon>
+            </button>
+          </div>
+          <h3 class="notif-detail-title">{{ selectedNotification?.title }}</h3>
+          <div class="notif-detail-time">{{ selectedNotification ? formatNotifTime(selectedNotification.createdAt) : '' }}</div>
+          <div class="notif-detail-content">{{ selectedNotification?.content || '无内容' }}</div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -1905,5 +1933,97 @@ const themeIconName = computed(() => {
   color: var(--c-text-muted);
   font-weight: 600;
   padding: 4px 0;
+}
+
+/* === 通知详情弹框 === */
+.notif-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.notif-detail-dialog {
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--c-card);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.notif-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.notif-detail-type-tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--r-full);
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--c-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+.notif-detail-close {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--c-text-muted);
+  transition: all 0.16s ease;
+}
+.notif-detail-close:hover {
+  background: var(--c-bg-soft);
+  color: var(--c-text);
+}
+.notif-detail-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--c-text);
+  line-height: 1.4;
+}
+.notif-detail-time {
+  font-size: 13px;
+  color: var(--c-text-muted);
+}
+.notif-detail-content {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--c-text-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-border-soft);
+}
+
+/* 弹框过渡动画 */
+.notif-detail-enter-active,
+.notif-detail-leave-active {
+  transition: opacity 0.2s ease;
+}
+.notif-detail-enter-active .notif-detail-dialog,
+.notif-detail-leave-active .notif-detail-dialog {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+.notif-detail-enter-from,
+.notif-detail-leave-to {
+  opacity: 0;
+}
+.notif-detail-enter-from .notif-detail-dialog,
+.notif-detail-leave-to .notif-detail-dialog {
+  transform: scale(0.95) translateY(-10px);
+  opacity: 0;
 }
 </style>

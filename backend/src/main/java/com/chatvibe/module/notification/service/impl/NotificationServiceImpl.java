@@ -12,6 +12,8 @@ import com.chatvibe.module.notification.vo.NotificationVO;
 import com.chatvibe.module.user.service.UserService;
 import com.chatvibe.module.user.vo.NotificationPreferencesVO;
 import com.chatvibe.security.SecurityUtils;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.RequestNotPermitted;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -54,6 +56,18 @@ public class NotificationServiceImpl implements NotificationService {
         notification.setContent(content);
         notification.setExtra(extra);
         notification.setIsRead(0);
+        // 系统通知类型：从 extra JSON 中解析 announcementId，设置到实体上以便后续撤回批量删除
+        if (type == NotificationTypeEnum.SYSTEM && extra != null && !extra.isBlank()) {
+            try {
+                JSONObject json = JSONUtil.parseObj(extra);
+                Long announcementId = json.getLong("announcementId");
+                if (announcementId != null) {
+                    notification.setAnnouncementId(announcementId);
+                }
+            } catch (Exception e) {
+                log.debug("[通知] 解析 announcementId 失败，忽略: extra={}", extra);
+            }
+        }
         notificationMapper.insert(notification);
 
         evictUnreadCountCache(userId);

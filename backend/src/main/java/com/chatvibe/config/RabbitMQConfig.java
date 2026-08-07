@@ -64,6 +64,10 @@ public class RabbitMQConfig {
     public static final String GROUP_TRANSFER_QUEUE = "group.transfer.event";
     public static final String GROUP_TRANSFER_ROUTING_KEY = "group.transfer.#";
 
+    // 公告发布事件
+    public static final String ANNOUNCEMENT_QUEUE = "announcement.publish.event";
+    public static final String ANNOUNCEMENT_ROUTING_KEY = "announcement.publish.#";
+
     @Bean
     public Queue groupRemoveQueue() {
         return QueueBuilder.durable(GROUP_REMOVE_QUEUE).build();
@@ -87,6 +91,19 @@ public class RabbitMQConfig {
     @Bean
     public Binding groupTransferBinding() {
         return BindingBuilder.bind(groupTransferQueue()).to(chatExchange()).with(GROUP_TRANSFER_ROUTING_KEY);
+    }
+
+    /** 公告发布事件队列 */
+    @Bean
+    public Queue announcementQueue() {
+        return QueueBuilder.durable(ANNOUNCEMENT_QUEUE).build();
+    }
+
+    @Bean
+    public Binding announcementBinding() {
+        return BindingBuilder.bind(announcementQueue())
+                .to(chatExchange())
+                .with(ANNOUNCEMENT_ROUTING_KEY);
     }
 
     /** 群邀请事件队列 */

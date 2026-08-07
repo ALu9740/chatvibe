@@ -25,6 +25,8 @@ import type {
   AiConversationMessage,
   Announcement,
   CreateAnnouncementRequest,
+  NotificationRecord,
+  NotificationRecordQueryParams,
   RateLimiterConfig,
   CircuitBreakerConfig,
   CacheStat,
@@ -167,8 +169,14 @@ export function getAiConversationMessages(conversationId: number): Promise<AiCon
 // 通知公告
 // ============================================================
 
-export function getAnnouncementList(page = 1, size = 20): Promise<PageResult<Announcement>> {
-  return request.get<unknown, PageResult<Announcement>>('/admin/announcements', { params: { page, size } })
+export function getAnnouncementList(
+  page = 1,
+  size = 20,
+  keyword?: string
+): Promise<PageResult<Announcement>> {
+  return request.get<unknown, PageResult<Announcement>>('/admin/announcements', {
+    params: { page, size, keyword }
+  })
 }
 
 export function createAnnouncement(data: CreateAnnouncementRequest): Promise<boolean> {
@@ -177,6 +185,16 @@ export function createAnnouncement(data: CreateAnnouncementRequest): Promise<boo
 
 export function withdrawAnnouncement(id: number): Promise<boolean> {
   return request.post<unknown, boolean>(`/admin/announcements/${id}/withdraw`)
+}
+
+// ============================================================
+// 通知发送记录 (5.8.3)
+// ============================================================
+
+export function getNotificationRecords(
+  params: NotificationRecordQueryParams
+): Promise<PageResult<NotificationRecord>> {
+  return request.get<unknown, PageResult<NotificationRecord>>('/admin/notifications', { params })
 }
 
 // ============================================================

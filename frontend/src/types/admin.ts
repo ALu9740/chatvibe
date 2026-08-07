@@ -282,6 +282,55 @@ export interface CreateAnnouncementRequest {
   targetUserIds?: number[]
 }
 
+/** 公告列表查询参数 */
+export interface AnnouncementQueryParams {
+  keyword?: string
+  page: number
+  size: number
+}
+
+// ============================================================
+// 通知发送记录 (5.8.3)
+// ============================================================
+
+/** 通知发送记录列表项 */
+export interface NotificationRecord {
+  id: number
+  userId: number
+  userNickname?: string
+  userEmail?: string
+  type: number
+  typeDesc: string
+  title: string
+  content?: string
+  extra?: string
+  isRead: number
+  createdAt: string
+}
+
+/** 通知发送记录查询参数 */
+export interface NotificationRecordQueryParams {
+  type?: number | ''
+  startDate?: string
+  endDate?: string
+  keyword?: string
+  isRead?: number | ''
+  page: number
+  size: number
+}
+
+/** 通知类型选项 */
+export const NOTIFICATION_TYPE_OPTIONS = [
+  { value: 1, label: '系统消息' },
+  { value: 2, label: '好友请求' },
+  { value: 3, label: '好友接受' },
+  { value: 4, label: '好友删除' },
+  { value: 5, label: '群邀请' },
+  { value: 6, label: '被移除群' },
+  { value: 7, label: '群解散' },
+  { value: 8, label: '群转让' }
+] as const
+
 // ============================================================
 // 系统配置
 // ============================================================
