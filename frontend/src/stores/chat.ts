@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as chatApi from '@/api/chat'
 import { useAuthStore } from '@/stores/auth'
-import { isWsConnected, wsSendMessage, wsSendReadReceipt } from '@/composables/useWebSocket'
+import { isWsConnected, wsSendMessage, wsSendReadReceipt, subscribeConversation } from '@/composables/useWebSocket'
 import type {
   Conversation,
   ConversationType,
@@ -205,6 +205,12 @@ export const useChatStore = defineStore('chat', () => {
   async function fetchConversations(): Promise<void> {
     const list = await chatApi.getConversations()
     conversations.value = (list as unknown as RawConversation[]).map(mapConversation)
+    // 确保所有会话都已订阅 WebSocket 广播（覆盖新建会话、刷新列表等场景）
+    if (isWsConnected()) {
+      for (const conv of conversations.value) {
+        subscribeConversation(conv.id)
+      }
+    }
   }
 
   /** 切换当前会话并拉取历史消息 */
@@ -212,6 +218,8 @@ export const useChatStore = defineStore('chat', () => {
     const target = conversations.value.find((c) => c.id === conversationId)
     if (!target) return
     currentConversation.value = target
+    // 确保该会话已订阅 WebSocket 广播（覆盖重连后/新建会话等场景）
+    subscribeConversation(conversationId)
     // 已读消息清零
     target.unread = 0
     if (!messageMap.value[conversationId]) {
@@ -461,11 +469,11 @@ export const useChatStore = defineStore('chat', () => {
 
     // 去重判断：
     // - ID 相同：同一消息被重复广播
-    // - self 消息：WebSocket 回环，用 content + 5s 时间窗去重
+    // - self 消息：WebSocket 回环，用 content 匹配临时消息（不依赖时间窗，避免时钟偏差导致误判）
     // - AI 消息：存在占位消息（aiPlaceholderIdx）即视为重复，需替换
     const exists = aiPlaceholderIdx !== -1 || list.some(
       (m) => m.id === message.id ||
-      (message.sender === 'self' && m.sender === 'self' && m.content === message.content && Math.abs(new Date(m.time).getTime() - new Date(message.time).getTime()) < 5000)
+      (message.sender === 'self' && m.sender === 'self' && m.content === message.content)
     )
     if (exists) {
       if (message.sender === 'ai' && aiPlaceholderIdx !== -1) {

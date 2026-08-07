@@ -62,6 +62,39 @@ export function wsSendReadReceipt(conversationId: number | string): boolean {
   return wsPublish('/app/chat.read', { conversationId: Number(conversationId) })
 }
 
+/** 订阅指定会话频道（后端 topic 使用 . 分隔符：/topic/conversation.{id}） */
+export function subscribeConversation(conversationId: string): void {
+  if (!client || !client.connected) return
+  const key = `conv_${conversationId}`
+  if (subscriptions.has(key)) return
+
+  console.log(`[ChatVibe WS] 订阅会话频道: /topic/conversation.${conversationId}`)
+
+  const chatStore = useChatStore()
+  // 后端 ChatWebSocketHandler 广播路径为 /topic/conversation.{conversationId}
+  const sub = client.subscribe(`/topic/conversation.${conversationId}`, (message) => {
+    console.log(`[ChatVibe WS] 收到会话 ${conversationId} 的 MESSAGE 帧:`, message.body?.substring(0, 200))
+    try {
+      // 后端直接广播 Message 实体（裸结构），非 WsMessage 包装
+      const payload = JSON.parse(message.body) as RawMessage
+      chatStore.handleIncomingMessage(payload)
+    } catch (e) {
+      console.error('[ChatVibe WS] 会话消息解析失败', e)
+    }
+  })
+  subscriptions.set(key, { id: sub.id })
+}
+
+/** 取消订阅会话频道 */
+export function unsubscribeConversation(conversationId: string): void {
+  const key = `conv_${conversationId}`
+  const sub = subscriptions.get(key)
+  if (sub && client) {
+    client.unsubscribe(sub.id)
+    subscriptions.delete(key)
+  }
+}
+
 /** WebSocket 连接管理 composable */
 export function useWebSocket() {
   const wsUrl = import.meta.env.VITE_WS_URL
@@ -91,13 +124,16 @@ export function useWebSocket() {
         ? (msg) => console.log('[STOMP]', msg)
         : () => {},
       onConnect: () => {
-        console.log('[ChatVibe WS] ✅ 连接成功')
+        console.log('[ChatVibe WS] 连接成功')
         connected.value = true
         subscribeAll()
       },
       onDisconnect: () => {
-        console.log('[ChatVibe WS] ❌ 连接断开')
+        console.log('[ChatVibe WS] 连接断开')
         connected.value = false
+        // 清除订阅记录，确保重连后能重新订阅所有频道
+        // STOMP 重连后旧的 subscription ID 已失效，必须重新订阅
+        subscriptions.clear()
       },
       onWebSocketError: (event) => {
         console.error('[ChatVibe WS] WebSocket 传输层错误:', event)
@@ -182,39 +218,6 @@ export function useWebSocket() {
     // 订阅全部会话广播频道，确保任意会话的新消息都能实时接收
     for (const conv of chatStore.conversations) {
       subscribeConversation(conv.id)
-    }
-  }
-
-  /** 订阅指定会话频道（后端 topic 使用 . 分隔符：/topic/conversation.{id}） */
-  function subscribeConversation(conversationId: string): void {
-    if (!client || !client.connected) return
-    const key = `conv_${conversationId}`
-    if (subscriptions.has(key)) return
-
-    console.log(`[ChatVibe WS] 订阅会话频道: /topic/conversation.${conversationId}`)
-
-    const chatStore = useChatStore()
-    // 后端 ChatWebSocketHandler 广播路径为 /topic/conversation.{conversationId}
-    const sub = client.subscribe(`/topic/conversation.${conversationId}`, (message) => {
-      console.log(`[ChatVibe WS] 📨 收到会话 ${conversationId} 的 MESSAGE 帧:`, message.body?.substring(0, 200))
-      try {
-        // 后端直接广播 Message 实体（裸结构），非 WsMessage 包装
-        const payload = JSON.parse(message.body) as RawMessage
-        chatStore.handleIncomingMessage(payload)
-      } catch (e) {
-        console.error('[ChatVibe WS] 会话消息解析失败', e)
-      }
-    })
-    subscriptions.set(key, { id: sub.id })
-  }
-
-  /** 取消订阅会话频道 */
-  function unsubscribeConversation(conversationId: string): void {
-    const key = `conv_${conversationId}`
-    const sub = subscriptions.get(key)
-    if (sub && client) {
-      client.unsubscribe(sub.id)
-      subscriptions.delete(key)
     }
   }
 
