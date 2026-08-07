@@ -52,4 +52,64 @@
           AND created_at &gt; #{lastReadAt}
     </select>
 
+    <!-- 管理员审计：分页查询消息（含已删除记录） -->
+    <select id="selectAuditMessagesPage" resultMap="MessageResultMap">
+        SELECT m.*, u.nickname AS sender_name, u.avatar AS sender_avatar
+        FROM message m
+        LEFT JOIN user u ON u.id = m.sender_id
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND m.content LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="senderId != null">
+                AND m.sender_id = #{senderId}
+            </if>
+            <if test="conversationId != null">
+                AND m.conversation_id = #{conversationId}
+            </if>
+            <if test="type != null">
+                AND m.type = #{type}
+            </if>
+            <if test="aiOnly != null and aiOnly == true">
+                AND m.sender_id = 0 AND m.type = 0
+            </if>
+            <if test="startTime != null">
+                AND m.created_at &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND m.created_at &lt;= #{endTime}
+            </if>
+        </where>
+        ORDER BY m.created_at DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <!-- 管理员审计：统计消息总数（含已删除记录） -->
+    <select id="countAuditMessages" resultType="long">
+        SELECT COUNT(1) FROM message m
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND m.content LIKE CONCAT('%', #{keyword}, '%')
+            </if>
+            <if test="senderId != null">
+                AND m.sender_id = #{senderId}
+            </if>
+            <if test="conversationId != null">
+                AND m.conversation_id = #{conversationId}
+            </if>
+            <if test="type != null">
+                AND m.type = #{type}
+            </if>
+            <if test="aiOnly != null and aiOnly == true">
+                AND m.sender_id = 0 AND m.type = 0
+            </if>
+            <if test="startTime != null">
+                AND m.created_at &gt;= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND m.created_at &lt;= #{endTime}
+            </if>
+        </where>
+    </select>
+
 </mapper>

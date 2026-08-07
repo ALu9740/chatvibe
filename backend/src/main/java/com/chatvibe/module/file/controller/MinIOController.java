@@ -51,7 +51,21 @@ public class MinIOController {
 
             String contentType = obj.headers().get("Content-Type");
             if (contentType != null) {
+                // 对文本类文件强制追加 UTF-8 字符集，避免浏览器默认 ISO-8859-1 导致中文乱码
+                if (contentType.startsWith("text/") && !contentType.toLowerCase().contains("charset")) {
+                    contentType = contentType + "; charset=UTF-8";
+                }
+                // 如果是通用二进制类型，尝试根据扩展名推断更准确的类型
+                if ("application/octet-stream".equalsIgnoreCase(contentType)) {
+                    String guessed = guessContentType(objectName);
+                    if (!"application/octet-stream".equals(guessed)) {
+                        contentType = guessed;
+                    }
+                }
                 response.setContentType(contentType);
+            } else {
+                // MinIO 未返回 Content-Type 时，根据文件扩展名推断
+                response.setContentType(guessContentType(objectName));
             }
             String contentLength = obj.headers().get("Content-Length");
             long size = contentLength != null ? Long.parseLong(contentLength) : -1L;
@@ -63,5 +77,52 @@ public class MinIOController {
             log.warn("[MinIO] 文件读取失败: object={}, err={}", objectName, e.getMessage());
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
         }
+    }
+
+    /**
+     * 根据文件扩展名推断 Content-Type，文本类统一追加 charset=UTF-8
+     */
+    private String guessContentType(String objectName) {
+        if (objectName == null) {
+            return "application/octet-stream";
+        }
+        String lower = objectName.toLowerCase();
+        if (lower.endsWith(".txt") || lower.endsWith(".log")) {
+            return "text/plain; charset=UTF-8";
+        }
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+            return "text/html; charset=UTF-8";
+        }
+        if (lower.endsWith(".css")) {
+            return "text/css; charset=UTF-8";
+        }
+        if (lower.endsWith(".js")) {
+            return "application/javascript; charset=UTF-8";
+        }
+        if (lower.endsWith(".json")) {
+            return "application/json; charset=UTF-8";
+        }
+        if (lower.endsWith(".xml")) {
+            return "application/xml; charset=UTF-8";
+        }
+        if (lower.endsWith(".csv")) {
+            return "text/csv; charset=UTF-8";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (lower.endsWith(".gif")) {
+            return "image/gif";
+        }
+        if (lower.endsWith(".svg")) {
+            return "image/svg+xml";
+        }
+        if (lower.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        return "application/octet-stream";
     }
 }
