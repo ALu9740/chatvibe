@@ -45,4 +45,39 @@ public interface MessageMapper extends BaseMapper<Message> {
     int countUnreadAfter(@Param("conversationId") Long conversationId,
                          @Param("userId") Long userId,
                          @Param("lastReadAt") LocalDateTime lastReadAt);
+
+    /**
+     * 管理员审计：分页查询消息（含已删除记录，不经过 MyBatis-Plus 逻辑删除过滤）
+     *
+     * @param keyword        关键词(模糊匹配 content)
+     * @param senderId       发送者ID
+     * @param conversationId 会话ID
+     * @param type           消息类型(0-文本 1-图片 2-语音 3-文件 4-系统)
+     * @param aiOnly         是否仅查AI消息(senderId=0 且 type=0)
+     * @param startTime      起始时间
+     * @param endTime        结束时间
+     * @param offset         偏移量
+     * @param size           每页大小
+     * @return 消息列表(含已删除)
+     */
+    List<Message> selectAuditMessagesPage(@Param("keyword") String keyword,
+                                          @Param("senderId") Long senderId,
+                                          @Param("conversationId") Long conversationId,
+                                          @Param("type") Integer type,
+                                          @Param("aiOnly") Boolean aiOnly,
+                                          @Param("startTime") LocalDateTime startTime,
+                                          @Param("endTime") LocalDateTime endTime,
+                                          @Param("offset") int offset,
+                                          @Param("size") int size);
+
+    /**
+     * 管理员审计：统计消息总数（含已删除记录）
+     */
+    long countAuditMessages(@Param("keyword") String keyword,
+                            @Param("senderId") Long senderId,
+                            @Param("conversationId") Long conversationId,
+                            @Param("type") Integer type,
+                            @Param("aiOnly") Boolean aiOnly,
+                            @Param("startTime") LocalDateTime startTime,
+                            @Param("endTime") LocalDateTime endTime);
 }

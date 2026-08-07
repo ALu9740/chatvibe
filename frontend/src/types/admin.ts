@@ -143,7 +143,12 @@ export interface AuditMessage {
   senderName: string
   type: AdminMessageType
   content: string
+  /** 附加信息JSON(图片/文件消息含 fileName/fileSize) */
+  extra?: string
   createdAt: string
+  /** 是否已被管理员删除(逻辑删除) */
+  deleted?: boolean
+  /** 是否已被用户隐藏(用户级删除) */
   hidden?: boolean
 }
 

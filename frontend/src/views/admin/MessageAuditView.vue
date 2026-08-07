@@ -2,11 +2,12 @@
 // ============================================================
 // ChatVibe · 管理员后台 - 消息审计
 // 对应 PRD 5.5 消息审计
-// 功能：消息检索、查看详情、删除/隐藏违规消息
+// 功能：消息检索、查看详情（含图片/文件预览）、删除违规消息
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { searchMessages, deleteMessage } from '@/api/admin'
+import { resolveUploadUrl } from '@/utils/format'
 import type { AuditMessage, MessageSearchParams, AdminMessageType } from '@/types/admin'
 import type { PageResult } from '@/types'
 
@@ -41,16 +42,50 @@ const typeTagMap: Record<AdminMessageType, { text: string; type: string }> = {
   AI: { text: 'AI', type: 'danger' }
 }
 
-// 消息详情对话框
+// ====== 图片预览 ======
+const previewVisible = ref(false)
+const previewSrc = ref('')
+
+// ====== 消息详情对话框 ======
 const detailVisible = ref(false)
 const detailMessage = ref<AuditMessage | null>(null)
 
-// 删除原因对话框
+// ====== 删除原因对话框 ======
 const deleteDialogVisible = ref(false)
 const deleteForm = reactive({
   messageId: 0,
   reason: ''
 })
+
+// ====== 解析 extra JSON ======
+function parseExtra(extra?: string): { fileName?: string; fileSize?: number } | null {
+  if (!extra) return null
+  try {
+    return JSON.parse(extra)
+  } catch {
+    return null
+  }
+}
+
+// ====== 文件大小格式化 ======
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+// ====== 文件扩展名 ======
+function getFileExt(fileName?: string): string {
+  if (!fileName) return 'FILE'
+  const parts = fileName.split('.')
+  return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : 'FILE'
+}
+
+// ====== 解析图片 URL ======
+function resolveImageUrl(content: string): string {
+  return resolveUploadUrl(content)
+}
 
 async function loadData() {
   loading.value = true
@@ -118,6 +153,12 @@ async function confirmDelete() {
   }
 }
 
+/** 点击图片预览 */
+function clickPreview(content: string) {
+  previewSrc.value = resolveImageUrl(content)
+  previewVisible.value = true
+}
+
 onMounted(() => {
   loadData()
 })
@@ -167,9 +208,9 @@ onMounted(() => {
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="发送者" width="120">
+        <el-table-column label="发送者" width="130">
           <template #default="{ row }">
-            <span>{{ row.senderId === 0 ? '系统' : row.senderName }}</span>
+            <span>{{ row.senderName || (row.senderId === 0 ? '系统' : '未知') }}</span>
             <span class="sender-id">(ID: {{ row.senderId }})</span>
           </template>
         </el-table-column>
@@ -180,24 +221,43 @@ onMounted(() => {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="内容" min-width="260">
+        <el-table-column label="内容" min-width="280">
           <template #default="{ row }">
-            <span class="msg-content" :class="{ hidden: row.hidden }">{{ row.content }}</span>
+            <!-- 图片消息：缩略图预览 -->
+            <div v-if="row.type === 'IMAGE'" class="msg-image-cell">
+              <img
+                :src="resolveImageUrl(row.content)"
+                alt="图片消息"
+                class="msg-thumbnail"
+                @click="clickPreview(row.content)"
+              />
+            </div>
+            <!-- 文件消息：文件卡片 -->
+            <div v-else-if="row.type === 'FILE'" class="msg-file-cell">
+              <a :href="resolveImageUrl(row.content)" :download="parseExtra(row.extra)?.fileName" target="_blank" class="file-card-mini">
+                <span class="file-ext">{{ getFileExt(parseExtra(row.extra)?.fileName) }}</span>
+                <div class="file-info-mini">
+                  <span class="file-name-mini">{{ parseExtra(row.extra)?.fileName || '未命名文件' }}</span>
+                  <span class="file-size-mini">{{ formatFileSize(parseExtra(row.extra)?.fileSize) }}</span>
+                </div>
+              </a>
+            </div>
+            <!-- 文本/AI/系统消息 -->
+            <span v-else class="msg-content" :class="{ deleted: row.deleted }">{{ row.content }}</span>
           </template>
         </el-table-column>
         <el-table-column label="时间" prop="createdAt" width="160" />
-        <el-table-column label="状态" width="80">
+        <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.hidden ? 'danger' : 'success'" size="small">
-              {{ row.hidden ? '已删除' : '正常' }}
-            </el-tag>
+            <el-tag v-if="row.deleted" type="danger" size="small">已删除</el-tag>
+            <el-tag v-else type="success" size="small">正常</el-tag>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="openDetail(row)">详情</el-button>
             <el-button
-              v-if="!row.hidden"
+              v-if="!row.deleted"
               type="danger"
               size="small"
               link
@@ -220,22 +280,51 @@ onMounted(() => {
       </div>
     </el-card>
 
+    <!-- 图片预览 -->
+    <el-dialog v-model="previewVisible" title="图片预览" width="700px" class="image-preview-dialog">
+      <img :src="previewSrc" alt="图片预览" class="preview-image" />
+    </el-dialog>
+
     <!-- 消息详情 -->
-    <el-dialog v-model="detailVisible" title="消息详情" width="560px">
+    <el-dialog v-model="detailVisible" title="消息详情" width="600px">
       <el-descriptions :column="1" border v-if="detailMessage">
         <el-descriptions-item label="消息ID">{{ detailMessage.id }}</el-descriptions-item>
         <el-descriptions-item label="会话">{{ detailMessage.conversationName }} ({{ detailMessage.conversationType }})</el-descriptions-item>
         <el-descriptions-item label="会话ID">{{ detailMessage.conversationId }}</el-descriptions-item>
         <el-descriptions-item label="发送者">{{ detailMessage.senderName }} (ID: {{ detailMessage.senderId }})</el-descriptions-item>
-        <el-descriptions-item label="类型">{{ typeTagMap[detailMessage.type].text }}</el-descriptions-item>
-        <el-descriptions-item label="时间">{{ detailMessage.createdAt }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="detailMessage.hidden ? 'danger' : 'success'" size="small">
-            {{ detailMessage.hidden ? '已删除' : '正常' }}
+        <el-descriptions-item label="类型">
+          <el-tag :type="typeTagMap[detailMessage.type].type" size="small">
+            {{ typeTagMap[detailMessage.type].text }}
           </el-tag>
         </el-descriptions-item>
+        <el-descriptions-item label="时间">{{ detailMessage.createdAt }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag v-if="detailMessage.deleted" type="danger" size="small">已删除</el-tag>
+          <el-tag v-else type="success" size="small">正常</el-tag>
+        </el-descriptions-item>
         <el-descriptions-item label="消息内容">
-          <div class="detail-content">{{ detailMessage.content }}</div>
+          <!-- 图片消息 -->
+          <div v-if="detailMessage.type === 'IMAGE'" class="detail-image-wrap">
+            <img
+              :src="resolveImageUrl(detailMessage.content)"
+              alt="图片消息"
+              class="detail-image"
+              @click="clickPreview(detailMessage.content)"
+            />
+          </div>
+          <!-- 文件消息 -->
+          <div v-else-if="detailMessage.type === 'FILE'" class="detail-file-wrap">
+            <a :href="resolveImageUrl(detailMessage.content)" :download="parseExtra(detailMessage.extra)?.fileName" target="_blank" class="file-card-detail">
+              <span class="file-ext-detail">{{ getFileExt(parseExtra(detailMessage.extra)?.fileName) }}</span>
+              <div class="file-info-detail">
+                <span class="file-name-detail">{{ parseExtra(detailMessage.extra)?.fileName || '未命名文件' }}</span>
+                <span class="file-size-detail">{{ formatFileSize(parseExtra(detailMessage.extra)?.fileSize) }}</span>
+              </div>
+              <span class="file-download-text">下载</span>
+            </a>
+          </div>
+          <!-- 文本/AI/系统消息 -->
+          <div v-else class="detail-content" :class="{ deleted: detailMessage.deleted }">{{ detailMessage.content }}</div>
         </el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -297,6 +386,78 @@ onMounted(() => {
   margin-left: 4px;
 }
 
+// ====== 图片缩略图 ======
+.msg-image-cell {
+  .msg-thumbnail {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid var(--admin-border);
+    transition: transform 0.2s, box-shadow 0.2s;
+
+    &:hover {
+      transform: scale(1.08);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+  }
+}
+
+// ====== 文件卡片（表格内） ======
+.msg-file-cell {
+  .file-card-mini {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--admin-border);
+    transition: border-color 0.2s, background 0.2s;
+    max-width: 240px;
+
+    &:hover {
+      border-color: var(--admin-accent, #2563EB);
+      background: var(--admin-hover-bg);
+    }
+  }
+
+  .file-ext {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #2563EB, #0EA5E9);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .file-info-mini {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .file-name-mini {
+    font-size: 12px;
+    color: var(--admin-text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+  }
+
+  .file-size-mini {
+    font-size: 11px;
+    color: var(--admin-text-muted);
+  }
+}
+
 .msg-content {
   font-size: 13px;
   color: var(--admin-text-content);
@@ -305,18 +466,100 @@ onMounted(() => {
   -webkit-box-orient: vertical;
   overflow: hidden;
 
-  &.hidden {
+  &.deleted {
     color: var(--admin-text-disabled);
     text-decoration: line-through;
   }
 }
 
+// ====== 图片预览弹窗 ======
+.image-preview-dialog {
+  .preview-image {
+    width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+    border-radius: 8px;
+  }
+}
+
+// ====== 详情弹窗内容 ======
 .detail-content {
   font-size: 14px;
   color: var(--admin-text-primary);
   line-height: 1.6;
   word-break: break-all;
   white-space: pre-wrap;
+
+  &.deleted {
+    color: var(--admin-text-disabled);
+    text-decoration: line-through;
+  }
+}
+
+.detail-image-wrap {
+  .detail-image {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 8px;
+    cursor: pointer;
+    border: 1px solid var(--admin-border);
+  }
+}
+
+.detail-file-wrap {
+  .file-card-detail {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--admin-border);
+    transition: border-color 0.2s, background 0.2s;
+
+    &:hover {
+      border-color: var(--admin-accent, #2563EB);
+      background: var(--admin-hover-bg);
+    }
+  }
+
+  .file-ext-detail {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2563EB, #0EA5E9);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .file-info-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+  }
+
+  .file-name-detail {
+    font-size: 14px;
+    color: var(--admin-text-primary);
+    font-weight: 500;
+  }
+
+  .file-size-detail {
+    font-size: 12px;
+    color: var(--admin-text-muted);
+  }
+
+  .file-download-text {
+    font-size: 13px;
+    color: #2563EB;
+    font-weight: 500;
+  }
 }
 
 .pagination-wrap {
