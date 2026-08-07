@@ -13,7 +13,7 @@ import java.util.List;
  * AI 兜底服务实现
  * <p>
  * 当主服务（Spring AI ChatClient）不可用或熔断开启时返回兜底回复。
- * 始终注册；主服务由 {@code SpringAiChatService} 提供。
+ * 始终注册；主服务由 {@code FailoverAiService} 提供。
  * <p>
  * 迁移后返回 {@link Flux}&lt;String&gt;，逐字符模拟流式输出。
  *

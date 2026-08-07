@@ -15,18 +15,16 @@ spring:
   cache:
     type: caffeine
     cache-names:  userInfo,userEmail,emailExists,userNotifyPrefs
-  ai:
-    openai:
-      # Spring AI 自动配置（单供应商模式 / failover.enabled=false 时使用）
-      # 按 provider 选择 base-url:
-      #   qwen   -> https://dashscope.aliyuncs.com/compatible-mode   (DashScope OpenAI 兼容模式)
-      #   ollama -> http://localhost:11434                            (Ollama OpenAI 兼容端点 /v1/chat/completions)
-      base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode}
-      api-key: ${AI_API_KEY:dummy}
-      chat:
-        options:
-          model: ${AI_MODEL:qwen3.6-flash}
-          temperature: 0.7
+  # Spring AI OpenAI 自动配置已禁用
+  # AI 供应商配置完全由数据库管理，管理员通过后台动态配置
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
 
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
@@ -50,16 +48,8 @@ jwt:
   refresh-token-expiration: 604800000   # 7天
 
 chatvibe:
-  ai:
-    # AI 提供商: qwen（阿里云百炼） | ollama（本地）
-    # 两者均通过 Spring AI 的 OpenAI 兼容客户端调用，仅 base-url / api-key / model 不同
-    provider: ${AI_PROVIDER:ollama}
-    # 多供应商故障转移配置
-    # enabled=true 时启用 FailoverAiService 责任链，按优先级逐个尝试
-    # enabled=false 时退回单供应商模式（SpringAiChatService）
-    # providers 列表在 application-dev.yml / application-prod.yml 中按环境配置
-    failover:
-      enabled: ${AI_FAILOVER_ENABLED:true}
+  # AI 供应商配置已迁移到数据库(ai_provider 表 + system_config 表)
+  # 管理员通过后台动态管理供应商和故障转移优先级
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:}

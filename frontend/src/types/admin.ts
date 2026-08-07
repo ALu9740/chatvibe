@@ -210,8 +210,7 @@ export interface AiProviderStatus {
   baseUrl: string
   apiKey: string
   latency: number
-  priorityDev: number
-  priorityProd: number
+  priority: number
   createdAt: string
 }
 
@@ -223,15 +222,13 @@ export interface SaveAiProviderRequest {
   model: string
   baseUrl: string
   apiKey: string
-  priorityDev: number
-  priorityProd: number
+  priority: number
 }
 
 /** 故障转移配置 */
 export interface FailoverConfig {
   enabled: boolean
-  devPriority: string[]
-  prodPriority: string[]
+  priority: string[]
 }
 
 /** AI 对话监控列表项 */
@@ -244,6 +241,18 @@ export interface AiConversationRecord {
   model: string
   lastMessageAt: string
   messageCount: number
+}
+
+/** AI 对话消息详情（管理员只读） */
+export interface AiConversationMessage {
+  id: number
+  senderId: number
+  senderName: string
+  senderAvatar: string
+  type: number
+  content: string
+  isAi: boolean
+  createdAt: string
 }
 
 // ============================================================
@@ -322,6 +331,8 @@ export type OperationType =
   | 'GROUP_DISSOLVE' | 'GROUP_TRANSFER' | 'ANNOUNCEMENT_PUBLISH'
   | 'ANNOUNCEMENT_WITHDRAW' | 'RATE_LIMIT_CONFIG' | 'CIRCUIT_BREAKER_CONFIG'
   | 'CACHE_CLEAR' | 'ADMIN_ACCOUNT_MANAGE'
+  | 'AI_PROVIDER_ADD' | 'AI_PROVIDER_UPDATE' | 'AI_PROVIDER_DELETE'
+  | 'AI_PROVIDER_MANAGE' | 'FAILOVER_CONFIG'
 
 /** 操作日志项 */
 export interface OperationLog {
