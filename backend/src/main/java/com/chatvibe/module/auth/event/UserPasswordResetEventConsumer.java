@@ -1,5 +1,6 @@
 package com.chatvibe.module.auth.event;
 
+import com.chatvibe.config.DynamicMailSenderProvider;
 import com.chatvibe.config.RabbitMQConfig;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import jakarta.mail.MessagingException;
@@ -8,8 +9,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import cn.hutool.core.util.StrUtil;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
@@ -27,18 +26,15 @@ import java.time.format.DateTimeFormatter;
 @Component
 @RequiredArgsConstructor
 public class UserPasswordResetEventConsumer {
-    private final JavaMailSender mailSender;
-
-    @Value("${spring.mail.username}")
-    private String mailFrom;
+    private final DynamicMailSenderProvider mailSenderProvider;
 
     @RabbitListener(queues = RabbitMQConfig.USER_PASSWORD_RESET_QUEUE)
     @CircuitBreaker(name = "passwordResetService", fallbackMethod = "fallbackNotifyEmail")
     public void handlePasswordResetEvent(UserPasswordResetEvent event) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessage mimeMessage = mailSenderProvider.getMailSender().createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom(mailFrom);
+            helper.setFrom(mailSenderProvider.getFromAddress());
             helper.setTo(event.getEmail());
 
             // 获取当前时间字符串
@@ -107,7 +103,7 @@ public class UserPasswordResetEventConsumer {
             }
 
             helper.setText(html, true);
-            mailSender.send(mimeMessage);
+            mailSenderProvider.getMailSender().send(mimeMessage);
             log.info("[MQ] 密码重置通知邮件已发送: email={}, hasNewPassword={}", event.getEmail(), hasNewPassword);
         } catch (MessagingException e) {
             log.error("[MQ] 密码重置通知邮件发送失败: email={}", event.getEmail(), e);

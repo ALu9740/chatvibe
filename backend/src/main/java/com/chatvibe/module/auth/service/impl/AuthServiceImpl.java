@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.chatvibe.common.result.ResultCode;
 import com.chatvibe.common.exception.BusinessException;
+import com.chatvibe.config.DynamicMailSenderProvider;
 import com.chatvibe.module.auth.dto.LoginDTO;
 import com.chatvibe.module.auth.dto.RegisterDTO;
 import com.chatvibe.module.auth.dto.ResetPasswordDTO;
@@ -26,11 +27,9 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -68,15 +67,12 @@ public class AuthServiceImpl implements AuthService {
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate stringRedisTemplate;
-    private final JavaMailSender mailSender;
+    private final DynamicMailSenderProvider mailSenderProvider;
     private final CacheManager cacheManager;
     private final UserRegisterEventProducer userRegisterEventProducer;
     private final UserLoginEventProducer userLoginEventProducer;
     private final UserPasswordResetEventProducer userPasswordResetEventProducer;
     private final UserLogoutEventProducer userLogoutEventProducer;
-
-    @Value("${spring.mail.username}")
-    private String mailFrom;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -312,14 +308,14 @@ public class AuthServiceImpl implements AuthService {
      */
     private void sendVerificationEmail(String email, String code) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessage mimeMessage = mailSenderProvider.getMailSender().createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom(mailFrom);
+            helper.setFrom(mailSenderProvider.getFromAddress());
             helper.setTo(email);
             helper.setSubject("【ChatVibe】邮箱验证码");
             String html = buildEmailHtml(code);
             helper.setText(html, true);
-            mailSender.send(mimeMessage);
+            mailSenderProvider.getMailSender().send(mimeMessage);
         } catch (MessagingException e) {
             log.error("[邮件] 验证码邮件发送失败: email={}", email, e);
             throw new BusinessException(ResultCode.FAIL, "验证码邮件发送失败，请稍后重试");
