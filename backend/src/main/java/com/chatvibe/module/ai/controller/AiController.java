@@ -140,8 +140,8 @@ public class AiController {
                         if (completed[0]) {
                             return;
                         }
-                        // 1. 累积到段缓冲区（原始 token，含可能的 Markdown 符号）
-                        segmentBuffer.append(token);
+                        // 1. 累积到段缓冲区（先归一化字面量 \n 为实际换行，确保 \n\n 分段正确）
+                        segmentBuffer.append(normalizeNewlines(token));
 
                         // 2. 检测段落分隔符 \n\n → 拆分为独立消息
                         //    循环处理：单个 token 可能包含多个 \n\n
@@ -159,6 +159,9 @@ public class AiController {
                             if (!segment.isEmpty()) {
                                 // 清洗 Markdown 语法（**加粗**、# 标题、`代码` 等）
                                 String cleaned = stripMarkdown(segment);
+                                if (cleaned.isEmpty()) {
+                                    continue;
+                                }
                                 // 通知前端：用清洗后的内容替换当前消息段（去掉流式累积的 ** 等符号）
                                 emitter.send(SseEmitter.event().name("segment").data(cleaned));
                                 segmentIndex[0]++;
@@ -205,8 +208,10 @@ public class AiController {
                         String lastSegment = segmentBuffer.toString().trim();
                         if (!lastSegment.isEmpty()) {
                             String cleaned = stripMarkdown(lastSegment);
-                            saveAndBroadcastAiReply(chatConvId, cleaned);
-                            segmentIndex[0]++;
+                            if (!cleaned.isEmpty()) {
+                                saveAndBroadcastAiReply(chatConvId, cleaned);
+                                segmentIndex[0]++;
+                            }
                         }
                         emitter.send(SseEmitter.event().name("done").data("[DONE]"));
                         emitter.complete();
@@ -476,6 +481,10 @@ public class AiController {
             return text;
         }
         String result = text;
+        // 0. 将字面量 \n（反斜杠+n 两个字符）归一化为实际换行符
+        //    LLM 模型有时输出字面量 \n 而非实际换行，此步骤确保后续处理一致
+        result = result.replace("\\n", "\n");
+
         // --- 第一遍：匹配完整模式 ---
         // 1. 代码块: ```lang\ntext\n``` → text
         result = result.replaceAll("```[^\\n]*\\n([\\s\\S]*?)```", "$1");
@@ -513,9 +522,25 @@ public class AiController {
         result = result.replace("_", "");     // 残留的下划线斜体标记
         result = result.replaceAll("(?m)^#+\\s*$", ""); // 行首残留的 #
 
-        // 14. 清理多余空格
+        // 14. 将剩余的实际换行符替换为空格（\n\n 已在外部拆分为独立消息，段内不应有换行）
+        result = result.replace("\n", " ");
+        // 15. 清理多余空格（含换行转换后可能产生的连续空格）
         result = result.replaceAll("  +", " ");
         return result.trim();
+    }
+
+    /**
+     * 归一化换行符：将 LLM 输出的字面量 \n（反斜杠+n）转换为实际换行符。
+     * 在 token 入缓冲区前调用，确保 \n\n 分段逻辑能正确匹配。
+     *
+     * @param token 原始 token
+     * @return 归一化后的 token
+     */
+    private String normalizeNewlines(String token) {
+        if (token == null || token.isEmpty()) {
+            return token;
+        }
+        return token.replace("\\n", "\n").replace("\\r", "");
     }
 
     /**
