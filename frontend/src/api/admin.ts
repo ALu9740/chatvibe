@@ -233,6 +233,10 @@ export function updateEmailConfig(config: EmailConfig): Promise<boolean> {
   return request.put<unknown, boolean>('/admin/config/email', config)
 }
 
+export function sendTestEmail(config: EmailConfig): Promise<boolean> {
+  return request.post<unknown, boolean>('/admin/config/email/test', config)
+}
+
 // ============================================================
 // 操作日志
 // ============================================================

@@ -366,7 +366,9 @@ export interface EmailConfig {
   host: string
   port: number
   username: string
+  password: string
   fromEmail: string
+  sslEnabled: boolean
 }
 
 // ============================================================
@@ -381,7 +383,7 @@ export type OperationType =
   | 'ANNOUNCEMENT_WITHDRAW' | 'RATE_LIMIT_CONFIG' | 'CIRCUIT_BREAKER_CONFIG'
   | 'CACHE_CLEAR' | 'ADMIN_ACCOUNT_MANAGE'
   | 'AI_PROVIDER_ADD' | 'AI_PROVIDER_UPDATE' | 'AI_PROVIDER_DELETE'
-  | 'AI_PROVIDER_MANAGE' | 'FAILOVER_CONFIG'
+  | 'AI_PROVIDER_MANAGE' | 'FAILOVER_CONFIG' | 'EMAIL_CONFIG'
 
 /** 操作日志项 */
 export interface OperationLog {

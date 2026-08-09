@@ -42,7 +42,8 @@ const typeOptions: { label: string; value: OperationType }[] = [
   { label: '添加AI供应商', value: 'AI_PROVIDER_ADD' },
   { label: '更新AI供应商', value: 'AI_PROVIDER_UPDATE' },
   { label: '删除AI供应商', value: 'AI_PROVIDER_DELETE' },
-  { label: '故障转移配置', value: 'FAILOVER_CONFIG' }
+  { label: '故障转移配置', value: 'FAILOVER_CONFIG' },
+  { label: '邮件配置', value: 'EMAIL_CONFIG' }
 ]
 
 const typeTextMap: Record<OperationType, string> = {
@@ -65,7 +66,8 @@ const typeTextMap: Record<OperationType, string> = {
   AI_PROVIDER_UPDATE: '更新AI供应商',
   AI_PROVIDER_DELETE: '删除AI供应商',
   AI_PROVIDER_MANAGE: 'AI供应商管理',
-  FAILOVER_CONFIG: '故障转移配置'
+  FAILOVER_CONFIG: '故障转移配置',
+  EMAIL_CONFIG: '邮件配置'
 }
 
 const typeTagType: Record<OperationType, string> = {
@@ -88,7 +90,8 @@ const typeTagType: Record<OperationType, string> = {
   AI_PROVIDER_UPDATE: 'warning',
   AI_PROVIDER_DELETE: 'danger',
   AI_PROVIDER_MANAGE: 'primary',
-  FAILOVER_CONFIG: 'warning'
+  FAILOVER_CONFIG: 'warning',
+  EMAIL_CONFIG: 'warning'
 }
 
 async function loadData() {
