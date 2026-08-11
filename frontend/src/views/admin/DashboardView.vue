@@ -54,7 +54,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '总用户数',
       value: failed ? dash : (m ? formatNum(m.totalUsers) : '...'),
       icon: 'User',
-      gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      gradient: '#4F46E5',
       link: '/admin/users'
     },
     {
@@ -62,7 +62,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '在线用户',
       value: failed ? dash : (m ? formatNum(m.onlineUsers) : '...'),
       icon: 'Connection',
-      gradient: 'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+      gradient: '#059669',
       link: '/admin/users'
     },
     {
@@ -70,7 +70,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '今日新增',
       value: failed ? dash : (m ? m.todayNewUsers : '...'),
       icon: 'UserFilled',
-      gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+      gradient: '#0284C7',
       link: '/admin/users'
     },
     {
@@ -78,7 +78,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '今日消息',
       value: failed ? dash : (m ? formatNum(m.todayMessages) : '...'),
       icon: 'ChatDotRound',
-      gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      gradient: '#E11D48',
       link: '/admin/messages'
     },
     {
@@ -86,7 +86,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '今日AI调用',
       value: failed ? dash : (m ? formatNum(m.todayAiCalls) : '...'),
       icon: 'MagicStick',
-      gradient: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+      gradient: '#7C3AED',
       link: '/admin/ai'
     },
     {
@@ -94,7 +94,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '活跃群组',
       value: failed ? dash : (m ? m.activeGroups : '...'),
       icon: 'OfficeBuilding',
-      gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+      gradient: '#D97706',
       link: '/admin/groups'
     },
     {
@@ -102,14 +102,14 @@ const metricCards = computed<MetricCard[]>(() => {
       label: 'API可用率',
       value: failed ? dash : (m ? m.apiAvailability.toFixed(1) + '%' : '...'),
       icon: 'CircleCheck',
-      gradient: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)'
+      gradient: '#0891B2'
     },
     {
       key: 'avgResponseTime',
       label: '平均响应',
       value: failed ? dash : (m ? m.avgResponseTime + 'ms' : '...'),
       icon: 'Timer',
-      gradient: 'linear-gradient(135deg, #5ee7df 0%, #b490ca 100%)'
+      gradient: '#475569'
     }
   ]
 })

@@ -119,7 +119,7 @@ onMounted(async () => {
       </el-menu>
 
       <div v-show="!sidebarCollapsed" class="sidebar-footer">
-        <span class="version-tag">v1.0.0</span>
+        <span class="version-tag">v1.0</span>
       </div>
     </aside>
 

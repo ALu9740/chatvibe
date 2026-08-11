@@ -33,7 +33,7 @@ const techs: TechItem[] = [
 
     <div class="tech-grid">
       <div v-for="(tech, idx) in techs" :key="idx" class="tech-card">
-        <div class="tech-icon" :style="{ background: `linear-gradient(135deg, ${tech.color}, ${tech.color}DD)` }">
+        <div class="tech-icon" :style="{ background: tech.color }">
           {{ tech.abbr }}
         </div>
         <div class="tech-info">

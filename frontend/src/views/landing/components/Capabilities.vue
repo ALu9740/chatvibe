@@ -128,12 +128,6 @@ onUnmounted(() => observer?.disconnect())
     transform: translateY(-4px);
     box-shadow: $shadow-md;
     border-color: rgba(37, 99, 235, 0.2);
-
-    .cap-icon {
-      &::after {
-        opacity: 1;
-      }
-    }
   }
 }
 
@@ -149,22 +143,12 @@ onUnmounted(() => observer?.disconnect())
   position: relative;
   overflow: hidden;
 
-  /* hover 时的微光扫过效果 */
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.3) 50%, transparent 70%);
-    opacity: 0;
-    transition: opacity $dur-normal $ease-smooth;
-  }
-
-  &.icon-blue { background: $grad-primary; }
-  &.icon-green { background: linear-gradient(135deg, #059669, #10B981); }
-  &.icon-ai { background: $grad-ai; box-shadow: $shadow-glow-ai; }
-  &.icon-amber { background: linear-gradient(135deg, #D97706, #F59E0B); }
-  &.icon-violet { background: linear-gradient(135deg, #7C3AED, #6366F1); }
-  &.icon-cyan { background: linear-gradient(135deg, #0891B2, #06B6D4); }
+  &.icon-blue { background: #2563EB; }
+  &.icon-green { background: #059669; }
+  &.icon-ai { background: #7C3AED; }
+  &.icon-amber { background: #D97706; }
+  &.icon-violet { background: #6366F1; }
+  &.icon-cyan { background: #0891B2; }
 }
 
 .cap-title {
