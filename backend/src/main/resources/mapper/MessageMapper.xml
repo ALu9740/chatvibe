@@ -112,4 +112,33 @@
         </where>
     </select>
 
+    <!-- 仪表盘：统计指定时间范围内每天的 AI 回复消息数（sender_id=0, type=0） -->
+    <select id="countAiMessagesDaily" resultType="java.util.Map">
+        SELECT DATE(m.created_at) AS date, COUNT(*) AS count
+        FROM message m
+        WHERE m.sender_id = 0
+          AND m.type = 0
+          AND m.deleted = 0
+          AND m.created_at &gt;= #{startTime}
+        GROUP BY DATE(m.created_at)
+        ORDER BY date
+    </select>
+
+    <!-- 仪表盘：统计指定时间范围内 AI 回复消息的供应商分布 -->
+    <!-- AI消息的conversation_id可能指向conversation表(私聊/群聊/AI会话)或ai_conversation表(独立AI对话) -->
+    <!-- 不限制c.type，因为AI可在任意会话类型中被调用(群聊@AI、私聊AI、独立AI对话) -->
+    <!-- c.id IS NULL 确保仅当conversation表无匹配时才查ai_conversation表，避免ID碰撞产生重复行 -->
+    <!-- 注意：COALESCE中不能使用子查询，否则MySQL only_full_group_by模式会报ERROR 1055 -->
+    <select id="getAiProviderBreakdown" resultType="java.util.Map">
+        SELECT COALESCE(c.ai_provider, ac.provider, 'unknown') AS provider, COUNT(*) AS count
+        FROM message m
+        LEFT JOIN conversation c ON c.id = m.conversation_id
+        LEFT JOIN ai_conversation ac ON ac.id = m.conversation_id AND c.id IS NULL
+        WHERE m.sender_id = 0
+          AND m.type = 0
+          AND m.deleted = 0
+          AND m.created_at &gt;= #{startTime}
+        GROUP BY COALESCE(c.ai_provider, ac.provider, 'unknown')
+    </select>
+
 </mapper>

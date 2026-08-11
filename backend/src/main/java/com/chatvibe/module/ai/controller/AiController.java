@@ -79,6 +79,7 @@ public class AiController {
     private final SimpMessagingTemplate messagingTemplate;
     private final AICiruitBreakerService aiCiruitBreakerService;
     private final com.chatvibe.config.AiProviderRegistry aiProviderRegistry;
+    private final com.chatvibe.module.ai.service.AiCallMetricsService aiCallMetricsService;
 
     // ============================================================
     // SSE 流式对话
@@ -106,6 +107,8 @@ public class AiController {
         final int[] segmentIndex = {0};
         // 段缓冲区：累积 token 直到检测到 \n\n（段落分隔），则拆分为独立消息
         final StringBuilder segmentBuffer = new StringBuilder();
+        // 记录调用开始时间，用于统计响应时间
+        final long callStartTime = System.currentTimeMillis();
 
         // 聊天会话ID（私聊/群聊/独立AI会话），用于落库 AI 回复 + WebSocket 广播
         Long chatConvId = dto.getChatConversationId();
@@ -116,12 +119,22 @@ public class AiController {
 
         // 记录当前使用的供应商和模型到会话（管理员后台可按供应商筛选）
         // chatConvId 是 conversation 表的会话 ID（type=3 AI会话），直接更新该表的 aiProvider/aiModel 字段
-        if (chatConvId != null && !aiProviderRegistry.getProviders().isEmpty()) {
-            var primary = aiProviderRegistry.getProviders().get(0);
+        if (chatConvId != null) {
+            String providerName;
+            String modelName;
+            if (!aiProviderRegistry.getProviders().isEmpty()) {
+                var primary = aiProviderRegistry.getProviders().get(0);
+                providerName = primary.name();
+                modelName = primary.model();
+            } else {
+                // 供应商注册表为空时回退到 AiService 默认供应商
+                providerName = aiService.getProvider();
+                modelName = null;
+            }
             conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                     .eq(Conversation::getId, chatConvId)
-                    .set(Conversation::getAiProvider, primary.name())
-                    .set(Conversation::getAiModel, primary.model()));
+                    .set(Conversation::getAiProvider, providerName)
+                    .set(Conversation::getAiModel, modelName));
         }
 
         // 通过熔断器调用 AI 服务，返回 Flux<String>，订阅后桥接到 SseEmitter
@@ -187,6 +200,8 @@ public class AiController {
                     // onErrorResume 已将主服务错误转为兜底 Flux，
                     // 此处仅当兜底 Flux 自身也失败时才会触发（极端情况）
                     log.error("[AI] 兜底服务也失败: {}", error.getMessage());
+                    // 记录失败的 AI 调用指标
+                    aiCallMetricsService.recordCall(false, System.currentTimeMillis() - callStartTime);
                     if (!completed[0]) {
                         completed[0] = true;
                         try {
@@ -202,6 +217,8 @@ public class AiController {
                         return;
                     }
                     completed[0] = true;
+                    // 记录成功的 AI 调用指标
+                    aiCallMetricsService.recordCall(true, System.currentTimeMillis() - callStartTime);
                     try {
                         // 保存最后一段（如果有剩余内容）
                         // 最后一段内容已通过 replace 事件展示在前端，此处只需落库+广播
@@ -310,6 +327,7 @@ public class AiController {
                                          @Valid @RequestBody SendAiMessageDTO dto) {
         Long userId = SecurityUtils.getCurrentUserId();
         AiConversation conv = getOwnedAiConversation(conversationId, userId);
+        long callStartTime = System.currentTimeMillis();
 
         // 1. 落库用户消息
         Message userMsg = new Message();
@@ -347,8 +365,13 @@ public class AiController {
         }
 
         if (fullResponse.length() == 0) {
+            // 记录失败的 AI 调用指标
+            aiCallMetricsService.recordCall(false, System.currentTimeMillis() - callStartTime);
             throw new BusinessException(ResultCode.AI_SERVICE_ERROR, "AI 未返回内容");
         }
+
+        // 记录成功的 AI 调用指标
+        aiCallMetricsService.recordCall(true, System.currentTimeMillis() - callStartTime);
 
         // 4. 落库 AI 回复（清洗 Markdown 语法）
         String aiReply = stripMarkdown(fullResponse.toString());
@@ -371,6 +394,9 @@ public class AiController {
             var primary = aiProviderRegistry.getProviders().get(0);
             conv.setProvider(primary.name());
             conv.setModel(primary.model());
+        } else {
+            // 供应商注册表为空时回退到 AiService 默认供应商
+            conv.setProvider(aiService.getProvider());
         }
         aiConversationMapper.updateById(conv);
 

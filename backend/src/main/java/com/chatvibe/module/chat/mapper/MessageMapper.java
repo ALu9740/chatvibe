@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Param;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 消息 Mapper
@@ -80,4 +81,22 @@ public interface MessageMapper extends BaseMapper<Message> {
                             @Param("aiOnly") Boolean aiOnly,
                             @Param("startTime") LocalDateTime startTime,
                             @Param("endTime") LocalDateTime endTime);
+
+    /**
+     * 统计指定时间范围内每天的 AI 回复消息数（sender_id=0, type=0）
+     * 用于仪表盘 AI 调用趋势图
+     *
+     * @param startTime 起始时间
+     * @return 每日统计列表，每项包含 date(java.time.LocalDate) 和 count(Long)
+     */
+    List<Map<String, Object>> countAiMessagesDaily(@Param("startTime") LocalDateTime startTime);
+
+    /**
+     * 统计指定时间范围内 AI 回复消息的供应商分布
+     * 通过 JOIN conversation 表获取 ai_provider 字段
+     *
+     * @param startTime 起始时间
+     * @return 供应商分布列表，每项包含 provider(String) 和 count(Long)
+     */
+    List<Map<String, Object>> getAiProviderBreakdown(@Param("startTime") LocalDateTime startTime);
 }
