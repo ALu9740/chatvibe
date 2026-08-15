@@ -9,7 +9,7 @@ import type {
 
 /** 用户登录 */
 export function login(data: LoginRequest) {
-  return request.post<unknown, LoginResult>('/auth/login', data)
+  return request.post<unknown, LoginResult>('/auth/login', data, { _skipToast: true } as Record<string, unknown>)
 }
 
 /** 用户注册 */

@@ -41,8 +41,15 @@ async function handleLogin() {
       toast.success('登录成功', '欢迎回来 ChatVibe')
       const redirect = (route.query.redirect as string) || '/chat'
       router.replace(redirect)
-    } catch (e) {
+    } catch (e: any) {
       console.error('[LoginView.handleLogin] 登录失败:', e)
+      // 提取后端错误消息：业务错误在 e.message，HTTP 错误在 e.response.data.message
+      const msg = e?.response?.data?.message || e?.message || ''
+      if (msg) {
+        toast.error('登录失败', msg)
+      } else {
+        toast.error('登录失败', '请稍后重试')
+      }
     } finally {
       loading.value = false
     }

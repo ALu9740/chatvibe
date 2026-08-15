@@ -147,7 +147,9 @@ service.interceptors.response.use(
       } else {
         removeToken()
       }
-      toast.error('账号已被封禁', res.message || '账号已被封禁，请联系管理员')
+      if (!(response.config as Record<string, unknown>)?._skipToast) {
+        toast.error('账号已被封禁', res.message || '账号已被封禁，请联系管理员')
+      }
       const target = isAdmin ? '/admin/login' : '/login'
       if (!window.location.pathname.includes(target)) {
         setTimeout(() => {
