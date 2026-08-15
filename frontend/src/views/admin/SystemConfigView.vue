@@ -63,7 +63,7 @@ async function loadRateLimiters() {
   }
 }
 
-function startEditRateLimiter(row: RateLimiterConfig) {
+function startEditRateLimiter(row: any) {
   rateEditing.value = row.name
   Object.assign(rateEditForm, row)
 }
@@ -115,7 +115,7 @@ async function loadCircuitBreakers() {
   }
 }
 
-function startEditCb(row: CircuitBreakerConfig) {
+function startEditCb(row: any) {
   cbEditing.value = row.name
   Object.assign(cbEditForm, row)
 }

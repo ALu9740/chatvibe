@@ -81,7 +81,7 @@ const detailMessages = ref<AiConversationMessage[]>([])
 // 供应商相关方法
 // ============================================================
 
-function statusTagType(status: string): string {
+function statusTagType(status: string): any {
   if (status === 'online') return 'success'
   if (status === 'checking') return 'warning'
   return 'danger'
@@ -93,7 +93,7 @@ function statusText(status: string): string {
   return '离线'
 }
 
-function providerTagType(type: string): string {
+function providerTagType(type: string): any {
   return type === 'local' ? 'success' : 'primary'
 }
 
@@ -131,7 +131,7 @@ function openAddDialog() {
 }
 
 /** 打开编辑对话框 */
-function openEditDialog(row: AiProviderStatus) {
+function openEditDialog(row: any) {
   editingProviderId.value = row.id
   providerDialogTitle.value = '编辑 AI 供应商'
   providerForm.value = {
@@ -177,7 +177,7 @@ async function saveProvider() {
 }
 
 /** 删除供应商 */
-async function handleDelete(row: AiProviderStatus) {
+async function handleDelete(row: any) {
   try {
     await ElMessageBox.confirm(
       `确定删除供应商 "${row.name}" 吗？删除后该供应商将不可用。`,
@@ -194,7 +194,7 @@ async function handleDelete(row: AiProviderStatus) {
 }
 
 /** 测试供应商连接 */
-async function handleTest(row: AiProviderStatus) {
+async function handleTest(row: any) {
   testingId.value = row.id
   try {
     const result = await testAiProvider(row.id)
@@ -311,7 +311,7 @@ function handleConvSearch() {
   loadConversations()
 }
 
-async function handleViewConversation(row: AiConversationRecord) {
+async function handleViewConversation(row: any) {
   detailTitle.value = `对话 #${row.id} - ${row.title || '无标题'}`
   detailDialogVisible.value = true
   detailLoading.value = true

@@ -70,7 +70,7 @@ const typeTextMap: Record<OperationType, string> = {
   EMAIL_CONFIG: '邮件配置'
 }
 
-const typeTagType: Record<OperationType, string> = {
+const typeTagType: Record<OperationType, any> = {
   LOGIN: 'success',
   LOGOUT: 'info',
   USER_BAN: 'danger',

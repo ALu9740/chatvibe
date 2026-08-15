@@ -34,7 +34,7 @@ const typeOptions: { label: string; value: AdminMessageType }[] = [
   { label: 'AI', value: 'AI' }
 ]
 
-const typeTagMap: Record<AdminMessageType, { text: string; type: string }> = {
+const typeTagMap: Record<AdminMessageType, { text: string; type: any }> = {
   TEXT: { text: '文本', type: '' },
   IMAGE: { text: '图片', type: 'success' },
   FILE: { text: '文件', type: 'warning' },
@@ -127,12 +127,12 @@ function handleSizeChange(size: number) {
   loadData()
 }
 
-function openDetail(row: AuditMessage) {
+function openDetail(row: any) {
   detailMessage.value = row
   detailVisible.value = true
 }
 
-function openDeleteDialog(row: AuditMessage) {
+function openDeleteDialog(row: any) {
   deleteForm.messageId = row.id
   deleteForm.reason = ''
   deleteDialogVisible.value = true

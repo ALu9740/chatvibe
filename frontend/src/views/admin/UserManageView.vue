@@ -42,7 +42,7 @@ const roleMap: Record<UserRole, string> = {
   SUPER_ADMIN: '超级管理员'
 }
 
-const roleTagType: Record<UserRole, string> = {
+const roleTagType: Record<UserRole, any> = {
   USER: 'info',
   OPERATOR: 'warning',
   ADMIN: 'success',
@@ -105,7 +105,7 @@ function handleSizeChange(size: number) {
   loadData()
 }
 
-function openBanDialog(row: SystemUser) {
+function openBanDialog(row: any) {
   banForm.userId = row.id
   banForm.userNickname = row.nickname
   banForm.type = 'temp'
@@ -130,7 +130,7 @@ async function confirmBan() {
   }
 }
 
-async function handleUnban(row: SystemUser) {
+async function handleUnban(row: any) {
   try {
     await ElMessageBox.confirm(`确定解封用户 ${row.nickname} 吗？`, '解封确认', { type: 'warning' })
     await unbanUser(row.id)
@@ -141,7 +141,7 @@ async function handleUnban(row: SystemUser) {
   }
 }
 
-function openRoleDialog(row: SystemUser) {
+function openRoleDialog(row: any) {
   roleForm.userId = row.id
   roleForm.userNickname = row.nickname
   roleForm.role = row.role
@@ -160,7 +160,7 @@ async function confirmRoleChange() {
   }
 }
 
-async function handleResetPassword(row: SystemUser) {
+async function handleResetPassword(row: any) {
   try {
     await ElMessageBox.confirm(`确定重置用户 ${row.nickname} 的密码吗？`, '密码重置', { type: 'warning' })
     await resetUserPassword(row.id)

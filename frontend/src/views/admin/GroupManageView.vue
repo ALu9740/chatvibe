@@ -73,7 +73,7 @@ function handleSizeChange(size: number) {
   loadData()
 }
 
-function openDissolveDialog(row: SystemGroup) {
+function openDissolveDialog(row: any) {
   dissolveForm.groupId = row.id
   dissolveForm.groupName = row.name
   dissolveForm.reason = ''

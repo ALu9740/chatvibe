@@ -61,7 +61,7 @@ export function useECharts(
   elRef: Ref<HTMLElement | null>,
   optionFn: () => Record<string, unknown>
 ) {
-  const chart = ref<echarts.ECharts | null>(null)
+  const chart = ref<any>(null)
   let resizeObserver: ResizeObserver | null = null
 
   function initChart() {

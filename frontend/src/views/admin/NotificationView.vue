@@ -154,7 +154,7 @@ async function confirmCreate() {
   }
 }
 
-async function handleWithdraw(row: Announcement) {
+async function handleWithdraw(row: any) {
   try {
     await ElMessageBox.confirm(
       `确定撤回公告"${row.title}"吗？撤回后通知记录将从用户通知列表中移除，此操作不可撤销。`,
@@ -173,7 +173,7 @@ async function handleWithdraw(row: Announcement) {
 const annDetailVisible = ref(false)
 const selectedAnnouncement = ref<Announcement | null>(null)
 
-function handleAnnDetail(row: Announcement) {
+function handleAnnDetail(row: any) {
   selectedAnnouncement.value = row
   annDetailVisible.value = true
 }
@@ -249,8 +249,8 @@ function resetNotifFilters() {
 }
 
 /** 通知类型标签颜色 */
-function notifTypeTagType(type: number): string {
-  const map: Record<number, string> = {
+function notifTypeTagType(type: number): any {
+  const map: Record<number, any> = {
     1: 'danger',
     2: 'warning',
     3: 'success',
@@ -271,7 +271,7 @@ onMounted(() => {
 })
 
 /** 切换Tab时按需加载数据 */
-function handleTabChange(tab: string) {
+function handleTabChange(tab: any) {
   if (tab === 'records') {
     loadNotifications()
   } else if (tab === 'announcement') {
