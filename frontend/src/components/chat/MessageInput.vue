@@ -51,6 +51,10 @@ function handleSend() {
     toast.warning('请输入消息内容', '消息不能为空')
     return
   }
+  if (content.length > 5000) {
+    toast.warning('消息内容过长', '单条消息不能超过 5000 个字符')
+    return
+  }
   if (props.disabled) {
     toast.info('AI 生成中', 'AI 正在生成回复，请稍候')
     return

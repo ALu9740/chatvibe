@@ -110,3 +110,13 @@ export function notifyChatMessage(senderName: string, preview: string, silent = 
     playSound()
   }
 }
+
+/**
+ * 播放消息提示音（不弹出桌面通知）
+ * 适用于当前会话收到新消息时：用户已在聊天界面，只需声音提醒
+ * @param isAI 是否为 AI 消息（为 true 时受 aiAlert 偏好控制）
+ */
+export function playMessageSound(isAI = false) {
+  if (isAI && !preferences.aiAlert) return
+  playSound()
+}

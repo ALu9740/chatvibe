@@ -37,7 +37,7 @@ export function sendMessage(data: SendMessageRequest) {
     content: data.content,
     extra
   }
-  return request.post<unknown, Message>('/chat/message', payload)
+  return request.post<unknown, Message>('/chat/message', payload, { _skipToast: true } as Record<string, unknown>)
 }
 
 /** 标记会话已读 */

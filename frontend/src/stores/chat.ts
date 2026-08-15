@@ -12,7 +12,8 @@ import type {
   WsMessage
 } from '@/types'
 import { generateId, getAvatarText } from '@/utils/format'
-import { notifyChatMessage } from '@/utils/notify'
+import { notifyChatMessage, playMessageSound } from '@/utils/notify'
+import { toast } from '@/utils/toast'
 
 /** 后端 ConversationVO 原始结构 */
 interface RawConversation {
@@ -165,6 +166,24 @@ function mapMessage(raw: RawMessage, currentUserId?: string | number): Message {
   }
 }
 
+/** 前端消息发送限流：30次/分钟 */
+const MESSAGE_RATE_LIMIT = 30
+const MESSAGE_RATE_WINDOW = 60_000 // 60s
+const sendTimestamps: number[] = []
+
+/** 检查是否超过发送频率限制，未超限则记录本次时间戳 */
+function checkRateLimit(): boolean {
+  const now = Date.now()
+  while (sendTimestamps.length > 0 && now - sendTimestamps[0] > MESSAGE_RATE_WINDOW) {
+    sendTimestamps.shift()
+  }
+  if (sendTimestamps.length >= MESSAGE_RATE_LIMIT) {
+    return false
+  }
+  sendTimestamps.push(now)
+  return true
+}
+
 /** 聊天状态 store：管理会话列表、当前会话、消息记录与未读计数 */
 export const useChatStore = defineStore('chat', () => {
   const authStore = useAuthStore()
@@ -278,6 +297,11 @@ export const useChatStore = defineStore('chat', () => {
 
   /** 发送消息（乐观更新，WebSocket 优先，REST 降级） */
   async function sendMessage(payload: SendMessageRequest): Promise<void> {
+    // 前端限流：30次/分钟
+    if (!checkRateLimit()) {
+      toast.error('发送过于频繁', '请稍后再试')
+      return
+    }
     const tempId = generateId('m')
     // 填充当前用户昵称和头像，确保发送的消息气泡立即展示发送者信息
     const myNickname = authStore.user?.nickname || ''
@@ -350,6 +374,7 @@ export const useChatStore = defineStore('chat', () => {
       if (idx !== -1) list[idx] = mapped
     } catch (err) {
       console.error('[ChatStore] REST 发送消息失败:', err)
+      toast.error('发送失败', (err as Error).message || '请稍后重试')
       const list = messageMap.value[payload.conversationId]
       const idx = list.findIndex((m) => m.id === tempId)
       if (idx !== -1) list[idx].sendStatus = 'failed'
@@ -405,6 +430,7 @@ export const useChatStore = defineStore('chat', () => {
       if (i !== -1) list[i] = mapped
     } catch (err) {
       console.error('[ChatStore] 重试发送失败:', err)
+      toast.error('发送失败', (err as Error).message || '请稍后重试')
       const i = list.findIndex((m) => m.id === failedMessage.id)
       if (i !== -1) list[i].sendStatus = 'failed'
     }
@@ -530,6 +556,9 @@ export const useChatStore = defineStore('chat', () => {
         : message.type === 'FILE' ? '[文件]'
         : message.content || ''
       notifyChatMessage(senderName, preview, false, message.sender === 'ai')
+    } else if (conv && currentConversation.value?.id === conversationId && message.sender !== 'self') {
+      // 当前会话收到新消息：仅播放提示音，不弹出桌面通知
+      playMessageSound(message.sender === 'ai')
     }
   }
 
