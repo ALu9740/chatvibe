@@ -14,7 +14,7 @@ export function login(data: LoginRequest) {
 
 /** 用户注册 */
 export function register(data: RegisterRequest) {
-  return request.post<unknown, LoginResult>('/auth/register', data)
+  return request.post<unknown, LoginResult>('/auth/register', data, { _skipToast: true } as Record<string, unknown>)
 }
 
 /** 发送邮箱验证码 */

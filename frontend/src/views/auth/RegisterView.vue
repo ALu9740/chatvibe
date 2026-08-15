@@ -128,9 +128,18 @@ async function handleRegister() {
     })
     toast.success('注册成功', '请使用新账号登录')
     router.replace('/login')
-  } catch (e) {
+  } catch (e: any) {
     console.error('[RegisterView.handleRegister] 注册失败:', e)
-    toast.error('注册失败', '请稍后重试，或重新获取验证码')
+    // 提取后端错误消息：业务错误(HTTP 200+非200码)在 e.message，HTTP 错误在 e.response.data.message
+    const msg = e?.response?.data?.message || e?.message || ''
+    // 限流：使用针对性提示，引导用户重新获取验证码
+    if (msg.includes('频繁') || e?.response?.status === 429) {
+      toast.error('注册失败', '请稍后重试，或重新获取验证码')
+    } else if (msg) {
+      toast.error('注册失败', msg)
+    } else {
+      toast.error('注册失败', '请稍后重试，或重新获取验证码')
+    }
   } finally {
     loading.value = false
   }

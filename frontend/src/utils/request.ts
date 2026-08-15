@@ -157,8 +157,10 @@ service.interceptors.response.use(
       return Promise.reject(new Error(res.message || '账号已被封禁'))
     }
 
-    // 其他业务错误
-    toast.error('请求失败', res.message || '请稍后重试')
+    // 其他业务错误（支持 _skipToast 跳过拦截器 toast，由调用方自行处理）
+    if (!(response.config as Record<string, unknown>)?._skipToast) {
+      toast.error('请求失败', res.message || '请稍后重试')
+    }
     return Promise.reject(new Error(res.message || '请求失败'))
   },
   (error) => {
@@ -188,7 +190,10 @@ service.interceptors.response.use(
     } else if (status >= 500) {
       toast.error('服务器异常', '服务器开小差了，请稍后重试')
     } else {
-      toast.error('网络异常', error.response?.data?.message || error.message || '请检查网络连接')
+      // 支持 _skipToast 跳过拦截器 toast，由调用方自行处理
+      if (!(error.config as Record<string, unknown>)?._skipToast) {
+        toast.error('网络异常', error.response?.data?.message || error.message || '请检查网络连接')
+      }
     }
     return Promise.reject(error)
   }
