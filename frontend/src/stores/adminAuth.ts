@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as authApi from '@/api/auth'
 import { getAdminInfo } from '@/api/admin'
-import { getAdminToken, setAdminToken, removeAdminToken } from '@/utils/request'
+import { getAdminToken, setAdminToken, removeAdminToken, getAdminRefreshToken, setAdminRefreshToken, removeAdminRefreshToken } from '@/utils/request'
 import type { LoginRequest } from '@/types'
 import type { AdminUser } from '@/types/admin'
 
@@ -13,6 +13,7 @@ import type { AdminUser } from '@/types/admin'
 export const useAdminAuthStore = defineStore('adminAuth', () => {
   // 状态
   const token = ref<string>(getAdminToken() || '')
+  const refreshToken = ref<string>(getAdminRefreshToken() || '')
   const admin = ref<AdminUser | null>(null)
 
   // 计算属性
@@ -27,7 +28,9 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
       throw new Error('该账号无管理员权限')
     }
     token.value = result.accessToken
+    refreshToken.value = result.refreshToken || ''
     setAdminToken(result.accessToken)
+    setAdminRefreshToken(result.refreshToken || '')
   }
 
   /** 拉取管理员信息 */
@@ -41,8 +44,10 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
   /** 仅本地清理 */
   function logoutLocal(): void {
     token.value = ''
+    refreshToken.value = ''
     admin.value = null
     removeAdminToken()
+    removeAdminRefreshToken()
   }
 
   return {

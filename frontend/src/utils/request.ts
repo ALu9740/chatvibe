@@ -1,11 +1,13 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { toast } from '@/utils/toast'
-import type { ApiResponse } from '@/types'
+import type { ApiResponse, LoginResult } from '@/types'
 
 // C 端用户 token
 const TOKEN_KEY = 'chatvibe_token'
+const REFRESH_TOKEN_KEY = 'chatvibe_refresh_token'
 // 管理员后台 token（与 C 端隔离）
 const ADMIN_TOKEN_KEY = 'chatvibe_admin_token'
+const ADMIN_REFRESH_TOKEN_KEY = 'chatvibe_admin_refresh_token'
 
 // ============================================================
 // C 端 token 存取
@@ -26,6 +28,21 @@ export function removeToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+/** 获取 C 端 refreshToken */
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_TOKEN_KEY)
+}
+
+/** 保存 C 端 refreshToken */
+export function setRefreshToken(token: string): void {
+  localStorage.setItem(REFRESH_TOKEN_KEY, token)
+}
+
+/** 清除 C 端 refreshToken */
+export function removeRefreshToken(): void {
+  localStorage.removeItem(REFRESH_TOKEN_KEY)
+}
+
 // ============================================================
 // 管理员 token 存取
 // ============================================================
@@ -43,6 +60,21 @@ export function setAdminToken(token: string): void {
 /** 清除管理员 token */
 export function removeAdminToken(): void {
   localStorage.removeItem(ADMIN_TOKEN_KEY)
+}
+
+/** 获取管理员 refreshToken */
+export function getAdminRefreshToken(): string | null {
+  return localStorage.getItem(ADMIN_REFRESH_TOKEN_KEY)
+}
+
+/** 保存管理员 refreshToken */
+export function setAdminRefreshToken(token: string): void {
+  localStorage.setItem(ADMIN_REFRESH_TOKEN_KEY, token)
+}
+
+/** 清除管理员 refreshToken */
+export function removeAdminRefreshToken(): void {
+  localStorage.removeItem(ADMIN_REFRESH_TOKEN_KEY)
 }
 
 // ============================================================
@@ -65,6 +97,120 @@ function isAdminRequest(url: string | undefined): boolean {
 /** 判断当前页面是否在管理员后台 */
 function isAdminPage(): boolean {
   return window.location.pathname.startsWith('/admin')
+}
+
+// ============================================================
+// Token 自动刷新机制
+// ============================================================
+
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: unknown) => void
+}> = []
+
+/** 处理排队中的请求：刷新成功后重试，失败后拒绝 */
+function processQueue(error: unknown, token: string | null = null): void {
+  failedQueue.forEach(({ resolve, reject }) => {
+    if (error) {
+      reject(error)
+    } else {
+      resolve(token!)
+    }
+  })
+  failedQueue = []
+}
+
+/** 使用 refreshToken 获取新的 accessToken（绕过拦截器，使用原始 axios） */
+async function doRefreshToken(isAdmin: boolean): Promise<string> {
+  const stored = isAdmin ? getAdminRefreshToken() : getRefreshToken()
+  if (!stored) {
+    throw new Error('No refresh token available')
+  }
+
+  const response = await axios.post<ApiResponse<LoginResult>>(
+    `${import.meta.env.VITE_API_BASE}/auth/refresh`,
+    null,
+    {
+      headers: { Authorization: `Bearer ${stored}` },
+      timeout: 10000
+    }
+  )
+
+  const res = response.data
+  if (res.code !== 200 || !res.data?.accessToken) {
+    throw new Error(res.message || 'Token refresh failed')
+  }
+
+  const { accessToken, refreshToken: newRefresh } = res.data
+  if (isAdmin) {
+    setAdminToken(accessToken)
+    if (newRefresh) setAdminRefreshToken(newRefresh)
+  } else {
+    setToken(accessToken)
+    if (newRefresh) setRefreshToken(newRefresh)
+  }
+
+  return accessToken
+}
+
+/** 清除 token 并跳转登录页 */
+function redirectToLogin(isAdmin: boolean): void {
+  if (isAdmin) {
+    removeAdminToken()
+    removeAdminRefreshToken()
+    if (!window.location.pathname.includes('/admin/login')) {
+      window.location.href = '/admin/login'
+    }
+  } else {
+    removeToken()
+    removeRefreshToken()
+    if (!window.location.pathname.includes('/login')) {
+      window.location.href = '/login'
+    }
+  }
+}
+
+/** 处理 token 过期：尝试刷新并重试原始请求 */
+async function handleTokenExpired(
+  originalRequest: InternalAxiosRequestConfig & { _retry?: boolean },
+  isAdmin: boolean
+): Promise<unknown> {
+  // 已重试过，不再刷新，直接跳转登录
+  if (originalRequest._retry) {
+    redirectToLogin(isAdmin)
+    return Promise.reject(new Error('Token expired after retry'))
+  }
+
+  // 已有刷新请求进行中，排队等待
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      failedQueue.push({
+        resolve: (token: string) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`
+          resolve(service(originalRequest))
+        },
+        reject
+      })
+    })
+  }
+
+  originalRequest._retry = true
+  isRefreshing = true
+
+  try {
+    const newToken = await doRefreshToken(isAdmin)
+    processQueue(null, newToken)
+    originalRequest.headers.Authorization = `Bearer ${newToken}`
+    return service(originalRequest)
+  } catch (refreshError) {
+    processQueue(refreshError, null)
+    toast.error('登录已过期', '请重新登录')
+    redirectToLogin(isAdmin)
+    return Promise.reject(refreshError)
+  } finally {
+    isRefreshing = false
+  }
 }
 
 // 请求拦截器：按请求路径选择对应 token
@@ -105,30 +251,19 @@ service.interceptors.response.use(
       return res.data
     }
 
-    // 1002 未授权：清除对应 token 并跳转登录
+    // 1002 未授权：尝试刷新 token 并重试请求
     if (res.code === 1002) {
-      if (isAdmin) {
-        removeAdminToken()
-        toast.error('登录已过期', '请重新登录')
-        if (!window.location.pathname.includes('/admin/login')) {
-          window.location.href = '/admin/login'
-        }
-      } else {
-        removeToken()
-        toast.error('登录已过期', '请重新登录')
-        if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login'
-        }
-      }
-      return Promise.reject(new Error(res.message || '未授权'))
+      return handleTokenExpired(response.config, isAdmin)
     }
 
     // 2011 账号在其他设备登录：强制下线
     if (res.code === 2011) {
       if (isAdmin) {
         removeAdminToken()
+        removeAdminRefreshToken()
       } else {
         removeToken()
+        removeRefreshToken()
       }
       toast.error('账号被强制下线', res.message || '当前账号已在其他设备登录，您已被强制下线')
       const target = isAdmin ? '/admin/login' : '/login'
@@ -144,8 +279,10 @@ service.interceptors.response.use(
     if (res.code === 2009) {
       if (isAdmin) {
         removeAdminToken()
+        removeAdminRefreshToken()
       } else {
         removeToken()
+        removeRefreshToken()
       }
       if (!(response.config as Record<string, unknown>)?._skipToast) {
         toast.error('账号已被封禁', res.message || '账号已被封禁，请联系管理员')
@@ -170,18 +307,15 @@ service.interceptors.response.use(
     const isAdmin = isAdminRequest(error.config?.url) || isAdminPage()
 
     if (status === 401) {
-      if (isAdmin) {
-        removeAdminToken()
-        toast.error('登录已过期', '请重新登录')
-        window.location.href = '/admin/login'
-      } else {
-        removeToken()
-        toast.error('登录已过期', '请重新登录')
-        window.location.href = '/login'
+      if (error.config) {
+        return handleTokenExpired(error.config, isAdmin)
       }
+      redirectToLogin(isAdmin)
+      return Promise.reject(error)
     } else if (status === 403) {
       if (isAdmin) {
         removeAdminToken()
+        removeAdminRefreshToken()
         toast.error('无管理员权限', '该账号无权访问管理后台')
         setTimeout(() => {
           window.location.href = '/admin/login'

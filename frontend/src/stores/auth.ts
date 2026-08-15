@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import * as authApi from '@/api/auth'
 import * as userApi from '@/api/user'
-import { getToken, setToken, removeToken } from '@/utils/request'
+import { getToken, setToken, removeToken, getRefreshToken, setRefreshToken, removeRefreshToken } from '@/utils/request'
 import { resetNotify } from '@/utils/notify'
 import type { LoginRequest, User } from '@/types'
 
@@ -10,6 +10,7 @@ import type { LoginRequest, User } from '@/types'
 export const useAuthStore = defineStore('auth', () => {
   // 状态
   const token = ref<string>(getToken() || '')
+  const refreshToken = ref<string>(getRefreshToken() || '')
   const user = ref<User | null>(null)
 
   // 计算属性
@@ -28,8 +29,10 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(payload: LoginRequest): Promise<void> {
     const result = await authApi.login(payload)
     token.value = result.accessToken
+    refreshToken.value = result.refreshToken || ''
     user.value = result.user
     setToken(result.accessToken)
+    setRefreshToken(result.refreshToken || '')
   }
 
   /** 退出登录（调用后端 + 本地清理） */
@@ -41,8 +44,10 @@ export const useAuthStore = defineStore('auth', () => {
   /** 仅本地清理（token 失效时调用） */
   function logoutLocal(): void {
     token.value = ''
+    refreshToken.value = ''
     user.value = null
     removeToken()
+    removeRefreshToken()
     // 重置通知模块状态，使下次登录时 initNotify 重新拉取偏好
     resetNotify()
   }
