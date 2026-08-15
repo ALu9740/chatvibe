@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License">
 </p>
 
-ChatVibe 是一个前后端分离的即时通讯系统，涵盖私聊、群聊、好友体系、通知中心等核心 IM 能力，并内置 AI 智能对话模块——在群聊中 @AI 即可触发大模型推理，通过 SSE 流式回复将答案实时推送给所有在线成员。后端基于 **Spring Boot 3.3.5** 构建，前端采用 **Vue 3.5 + TypeScript** 全家桶，所有中间件（Redis、RabbitMQ、MinIO、Ollama）部署于单台 Ubuntu 虚拟机，适合作为全栈项目学习与二次开发的基础。
+ChatVibe 是一个前后端分离的即时通讯系统，涵盖私聊、群聊、好友体系、通知中心等核心 IM 能力，并内置 AI 智能对话模块——在群聊中 @AI 即可触发大模型推理，通过 SSE 流式回复将答案实时推送给所有在线成员。系统同时配备完整的管理员后台，支持数据概览、用户管理、消息审计、AI 服务管理、系统公告、系统配置与操作日志等运维功能。后端基于 **Spring Boot 3.3.5** 构建，前端采用 **Vue 3.5 + TypeScript** 全家桶，所有中间件（Redis、RabbitMQ、MinIO、Ollama）部署于单台 Ubuntu 虚拟机，适合作为全栈项目学习与二次开发的基础。
 
 ---
 
@@ -26,6 +26,7 @@ ChatVibe 是一个前后端分离的即时通讯系统，涵盖私聊、群聊�
 - [环境配置](#环境配置)
 - [数据库设计](#数据库设计)
 - [AI 模块](#ai-模块)
+- [管理后台](#管理后台)
 - [工程实践](#工程实践)
 - [测试](#测试)
 - [License](#license)
@@ -71,6 +72,17 @@ ChatVibe 是一个前后端分离的即时通讯系统，涵盖私聊、群聊�
 - **多设备登录冲突**：通过 login_version 版本号实现后登录设备踢出先登录设备
 - **接口级限流**：Resilience4j RateLimiter 覆盖所有 API，防止恶意请求
 
+### 管理后台
+
+- **数据概览仪表盘**：8 项核心指标卡片（总用户、在线、新增、消息、AI 调用、群组、API 可用率、平均响应）+ ECharts 趋势图（用户增长、消息量/AI 调用量、AI 用量分析与供应商占比）+ 中间件健康状态实时监控（MySQL/Redis/RabbitMQ/MinIO）
+- **用户管理**：多条件检索（关键词/状态/角色）、封禁/解封、角色变更（USER/OPERATOR/ADMIN/SUPER_ADMIN）、密码重置
+- **消息审计**：消息全文检索、按发送者/会话/类型/时间筛选、消息详情查看、违规消息删除
+- **群组管理**：群组搜索、群主信息查看、成员数统计、违规群组解散
+- **AI 服务管理**：供应商 CRUD 与连接测试、故障转移优先级拖拽配置、AI 对话记录监控与详情查看
+- **通知公告**：系统公告创建与发布（全员/指定用户，RabbitMQ 异步推送）、公告历史与撤回（自动删除 C 端通知）、通知发送记录多条件查询
+- **系统配置**：限流器参数热更新（Resilience4j RateLimiter）、熔断器参数热更新（CircuitBreaker）、Caffeine 缓存监控与清除、邮件 SMTP 动态配置与测试发送
+- **操作日志**：全量管理操作审计（20 种操作类型），支持按操作者/类型/时间检索
+
 ---
 
 ## 技术栈
@@ -87,6 +99,7 @@ ChatVibe 是一个前后端分离的即时通讯系统，涵盖私聊、群聊�
 | Element Plus | 2.9 | 企业级 UI 组件库，按需自动导入 |
 | SockJS + STOMP.js | - | WebSocket 实时通信客户端 |
 | Axios | 1.7 | HTTP 请求 |
+| ECharts | 5.5 | 数据可视化图表（管理后台仪表盘） |
 | Emoji Mart | - | 表情选择器 |
 | Pinyin Pro | - | 中文拼音排序与搜索 |
 | Sass | - | CSS 预处理器 |
@@ -130,7 +143,7 @@ ChatVibe 是一个前后端分离的即时通讯系统，涵盖私聊、群聊�
 ┌────────────────────────┴────────────────────────────────┐
 │                  业务服务层 (Controller/Service/Mapper)     │
 │                                                          │
-│  Auth · User · Friend · Group · Chat · AI · Notification │
+│  Auth · User · Friend · Group · Chat · AI · Notification · Admin │
 │                                                          │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐ │
 │  │ Caffeine │  │  Redis   │  │ RabbitMQ │  │   AI    │ │
@@ -175,6 +188,7 @@ chatvibe/
 │   │       ├── chat/                 # 聊天 (会话、消息、WebSocket 推送)
 │   │       ├── ai/                   # AI (对话管理、SSE 流式、故障转移)
 │   │       ├── notification/         # 通知 (列表、未读数、已读、删除)
+│   │       ├── admin/                # 管理后台 (仪表盘、用户/消息/群组管理、AI服务、公告、配置、日志)
 │   │       └── file/                 # 文件 (MinIO 存储)
 │   ├── src/main/resources/
 │   │   ├── application.yml           # 主配置
@@ -190,12 +204,13 @@ chatvibe/
 │   │   ├── api/                      # API 请求层 (auth、chat、friend、group、ai、notification、file、user)
 │   │   ├── components/               # 组件 (聊天会话列表、消息气泡、表情选择器、主题切换)
 │   │   ├── composables/              # 组合式函数 (WebSocket 连接、AI SSE 流)
-│   │   ├── layouts/                  # 布局 (聊天主布局)
+│   │   ├── layouts/                  # 布局 (聊天主布局、管理员后台布局)
 │   │   ├── router/                   # 路由配置
-│   │   ├── stores/                   # Pinia 状态 (auth、chat、ai、notification、theme)
+│   │   ├── stores/                   # Pinia 状态 (auth、chat、ai、notification、theme、adminAuth)
 │   │   ├── views/                    # 页面
 │   │   │   ├── auth/                 # 登录、注册、忘记密码
 │   │   │   ├── chat/                 # 聊天主界面
+│   │   │   ├── admin/                # 管理后台 (仪表盘、用户/消息/群组/AI/通知/配置/日志)
 │   │   │   ├── landing/              # 官网首页 (Hero、架构、技术栈、能力、AI Demo、快速开始)
 │   │   │   └── profile/              # 个人资料
 │   │   ├── styles/                   # 全局样式
@@ -322,7 +337,7 @@ chatvibe/
 
 ## 数据库设计
 
-数据库包含 9 张表，统一使用 utf8mb4 字符集，逻辑删除字段 `deleted`（0-未删除，1-已删除）。所有涉及唯一约束的表（user、conversation_member、group_member、message_hidden）采用 MySQL 生成列（Generated Column）实现软删除后唯一约束仍可复用——删除记录时生成列置 NULL，不再参与唯一索引。
+数据库包含 13 张表，统一使用 utf8mb4 字符集，逻辑删除字段 `deleted`（0-未删除，1-已删除）。所有涉及唯一约束的表（user、conversation_member、group_member、message_hidden）采用 MySQL 生成列（Generated Column）实现软删除后唯一约束仍可复用——删除记录时生成列置 NULL，不再参与唯一索引。
 
 | 表名 | 说明 |
 |------|------|
@@ -335,6 +350,10 @@ chatvibe/
 | `group_member` | 群组成员表，冗余于会话成员表用于群组维度管理 |
 | `ai_conversation` | AI 会话表，存储 ChatMemory 上下文（20 条消息窗口） |
 | `notification` | 通知表，8 种通知类型，复合索引优化未读查询 |
+| `operation_log` | 操作日志表，记录管理员操作（20 种类型），含操作者、IP、详情 |
+| `announcement` | 公告表，管理员发布的系统公告，支持全员/指定用户、撤回 |
+| `ai_provider` | AI 供应商配置表，管理员后台动态管理供应商（名称、模型、密钥、优先级） |
+| `system_config` | 系统配置表，键值对存储限流/熔断/邮件等运行时参数（JSON 格式） |
 
 ---
 
@@ -366,6 +385,47 @@ AI 对话通过 `/chat` 接口返回 `SseEmitter`，流式推送过程包含：
 
 - `chat-{chatConversationId}`：群聊共享上下文
 - `ai-{aiConversationId}`：独立 AI 对话上下文
+
+---
+
+## 管理后台
+
+管理后台采用独立的认证体系与前端路由（`/admin`），后端通过 Spring Security 的 `hasAnyRole("SUPER_ADMIN", "ADMIN", "OPERATOR")` 进行接口级权限控制，前端使用独立的 admin token 与路由守卫。
+
+### 角色权限
+
+| 角色 | 权限 |
+|------|------|
+| `SUPER_ADMIN` | 全部功能，含系统配置修改 |
+| `ADMIN` | 用户/消息/群组/AI/公告管理 |
+| `OPERATOR` | 数据概览、消息审计、通知公告查看 |
+
+### 功能模块
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  管理后台 (Vue 3 + Element Plus)        │
+│  ┌────────┬──────────────────────────────────────┐   │
+│  │ 侧边栏  │  数据概览  用户管理  消息审计  群组管理 │   │
+│  │ 导航    │  AI 服务  通知公告  系统配置  操作日志 │   │
+│  └────────┴──────────────────────────────────────┘   │
+│         独立 Token · 亮/暗主题 · ECharts 图表          │
+└───────────────────────┬──────────────────────────────┘
+                        │ HTTP (独立 admin token)
+┌───────────────────────┴──────────────────────────────┐
+│              Admin API (Spring Security RBAC)          │
+│  Dashboard · User · Message · Group · AI               │
+│  Announcement · Notification · Config · Log            │
+└──────────────────────────────────────────────────────┘
+```
+
+### 关键设计
+
+- **独立认证**：管理后台使用独立的 JWT token（存储于 `chatvibe_admin_token`），与 C 端 token 完全隔离，路由守卫拦截未授权访问
+- **动态配置热更新**：限流器/熔断器参数修改后直接写入 `system_config` 表，并同步更新 Resilience4j 运行时注册表，无需重启；邮件配置通过 `DynamicMailSenderProvider` 按需创建 `JavaMailSenderImpl`，支持管理后台实时修改 SMTP 参数
+- **公告异步推送**：公告发布通过 RabbitMQ 异步处理，支持全员/指定用户两种范围；撤回公告时自动删除已分发的 C 端通知记录
+- **仪表盘实时监控**：AI 调用指标通过 `AiCallMetricsService` 在 Redis 中实时记录，仪表盘每 60 秒自动刷新指标、每 30 秒刷新健康状态；ECharts 图表通过 CSS 变量自动适配亮/暗主题
+- **操作审计全覆盖**：20 种操作类型（登录/登出、用户封禁/解封/角色变更/密码重置、消息删除、群组解散/转让、公告发布/撤回、限流/熔断配置、缓存清除、AI 供应商管理、故障转移配置、邮件配置）均自动记录操作者、IP、详情
 
 ---
 
