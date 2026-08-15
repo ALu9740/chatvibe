@@ -36,5 +36,5 @@ export function logout() {
 
 /** 重置密码（忘记密码流程第 3 步调用，需携带验证码以通过后端二次校验） */
 export function resetPassword(data: { email: string; code: string; password: string }) {
-  return request.post<unknown, boolean>('/auth/password/reset', data)
+  return request.post<unknown, boolean>('/auth/password/reset', data, { _skipToast: true } as Record<string, unknown>)
 }

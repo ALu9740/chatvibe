@@ -23,6 +23,6 @@ public class ResetPasswordDTO {
     private String code;
 
     @NotBlank(message = "密码不能为空")
-    @Size(min = 6, message = "密码至少 6 位")
+    @Size(min = 6, max = 32, message = "密码长度6-32位")
     private String password;
 }

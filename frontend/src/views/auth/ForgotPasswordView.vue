@@ -115,6 +115,10 @@ async function handleResetPassword() {
     toast.warning('密码至少 6 位', '请设置更长的密码以保证安全')
     return
   }
+  if (password.value.length > 32) {
+    toast.warning('密码长度6-32位', '密码不能超过 32 位')
+    return
+  }
   if (password.value !== password2.value) {
     toast.warning('两次输入的密码不一致', '请重新确认新密码')
     return
@@ -128,9 +132,18 @@ async function handleResetPassword() {
     })
     toast.success('密码已重置', '请使用新密码登录')
     router.replace('/login')
-  } catch (e) {
+  } catch (e: any) {
     console.error('[ForgotPasswordView.handleResetPassword] 重置失败:', e)
-    toast.error('重置失败', '请稍后重试，或重新获取验证码')
+    // 提取后端错误消息：业务错误在 e.message，HTTP 错误在 e.response.data.message
+    const msg = e?.response?.data?.message || e?.message || ''
+    // 限流：使用针对性提示，引导用户重新获取验证码
+    if (msg.includes('频繁') || e?.response?.status === 429) {
+      toast.error('重置失败', '请稍后重试，或重新获取验证码')
+    } else if (msg) {
+      toast.error('重置失败', msg)
+    } else {
+      toast.error('重置失败', '请稍后重试，或重新获取验证码')
+    }
   } finally {
     loading.value = false
   }
@@ -251,7 +264,7 @@ onUnmounted(() => {
             v-model="password"
             type="password"
             size="large"
-            placeholder="至少 6 位新密码"
+            placeholder="6-32 位新密码"
             show-password
             :prefix-icon="'Lock'"
           />
