@@ -21,7 +21,7 @@ export function uploadAvatar(base64: string) {
 
 /** 修改密码 */
 export function changePassword(oldPassword: string, newPassword: string) {
-  return request.put<unknown, boolean>('/user/password', { oldPassword, newPassword })
+  return request.put<unknown, boolean>('/user/password', { oldPassword, newPassword }, { _skipToast: true } as Record<string, unknown>)
 }
 
 /** 更换绑定邮箱 */

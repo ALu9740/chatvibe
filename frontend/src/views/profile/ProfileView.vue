@@ -150,6 +150,11 @@ onUnmounted(() => {
 
 // 头像上传（后端 /user/avatar 接收 base64 字符串）
 async function handleAvatarChange(file: File) {
+  // 校验文件类型：仅允许图片
+  if (!file.type.startsWith('image/')) {
+    toast.warning('请上传图片文件', '支持 JPG / PNG 等图片格式')
+    return
+  }
   try {
     // 将 File 转为 base64 data URL
     const base64 = await fileToBase64(file)
@@ -210,8 +215,8 @@ async function handleChangePassword() {
     toast.warning('请填写完整密码信息', '旧密码与新密码均不能为空')
     return
   }
-  if (pwdForm.newPassword.length < 6) {
-    toast.warning('新密码至少 6 位', '请设置更长的密码以保证安全')
+  if (pwdForm.newPassword.length < 6 || pwdForm.newPassword.length > 32) {
+    toast.warning('密码长度6-32位', '请设置 6-32 位的密码')
     return
   }
   if (pwdForm.newPassword !== pwdForm.newPassword2) {
@@ -229,6 +234,8 @@ async function handleChangePassword() {
     // 无需再调登出接口（否则会因 Token 失效而报错），仅清理本地状态后跳转登录页。
     authStore.logoutLocal()
     router.push('/login')
+  } catch (err) {
+    toast.error('修改密码失败', (err as Error).message || '请稍后重试')
   } finally {
     savingPwd.value = false
   }
