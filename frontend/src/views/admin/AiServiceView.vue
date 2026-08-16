@@ -6,7 +6,8 @@
 // 配置全部存储在数据库中，管理员通过后台动态管理
 // ============================================================
 import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import {
   getAiProviders,
   addAiProvider,
@@ -109,7 +110,7 @@ async function loadProviders() {
   try {
     providers.value = await getAiProviders()
   } catch {
-    ElMessage.error('加载供应商列表失败')
+    toast.error('加载供应商列表失败')
   } finally {
     providersLoading.value = false
   }
@@ -149,11 +150,11 @@ function openEditDialog(row: any) {
 /** 保存供应商（添加或编辑） */
 async function saveProvider() {
   const f = providerForm.value
-  if (!f.name.trim()) { ElMessage.warning('请输入供应商名称'); return }
-  if (!f.model.trim()) { ElMessage.warning('请输入模型名称'); return }
-  if (!f.baseUrl.trim()) { ElMessage.warning('请输入 API 地址'); return }
+  if (!f.name.trim()) { toast.warning('请输入供应商名称'); return }
+  if (!f.model.trim()) { toast.warning('请输入模型名称'); return }
+  if (!f.baseUrl.trim()) { toast.warning('请输入 API 地址'); return }
   if (f.type === 'cloud' && !f.apiKey.trim() && editingProviderId.value === null) {
-    ElMessage.warning('云端 API 需要填写 API Key')
+    toast.warning('云端 API 需要填写 API Key')
     return
   }
 
@@ -161,16 +162,16 @@ async function saveProvider() {
   try {
     if (editingProviderId.value !== null) {
       await updateAiProvider(editingProviderId.value, f)
-      ElMessage.success('供应商已更新')
+      toast.success('供应商已更新')
     } else {
       await addAiProvider(f)
-      ElMessage.success('供应商已添加')
+      toast.success('供应商已添加')
     }
     providerDialogVisible.value = false
     loadProviders()
     loadFailoverConfig()
   } catch {
-    ElMessage.error('操作失败')
+    toast.error('操作失败')
   } finally {
     providerSaving.value = false
   }
@@ -185,7 +186,7 @@ async function handleDelete(row: any) {
       { type: 'warning' }
     )
     await deleteAiProvider(row.id)
-    ElMessage.success('供应商已删除')
+    toast.success('供应商已删除')
     loadProviders()
     loadFailoverConfig()
   } catch {
@@ -199,13 +200,13 @@ async function handleTest(row: any) {
   try {
     const result = await testAiProvider(row.id)
     if (result.success) {
-      ElMessage.success(result.message)
+      toast.success(result.message)
     } else {
-      ElMessage.error(result.message)
+      toast.error(result.message)
     }
     loadProviders()
   } catch {
-    ElMessage.error('测试请求失败')
+    toast.error('测试请求失败')
   } finally {
     testingId.value = null
   }
@@ -220,7 +221,7 @@ async function loadFailoverConfig() {
   try {
     failoverConfig.value = await getFailoverConfig()
   } catch {
-    ElMessage.error('加载故障转移配置失败')
+    toast.error('加载故障转移配置失败')
   } finally {
     failoverLoading.value = false
   }
@@ -258,8 +259,8 @@ function removeProvider(index: number) {
 }
 
 function addProvider(name: string) {
-  if (!name) { ElMessage.warning('请先选择供应商'); return }
-  if (editConfig.value.priority.includes(name)) { ElMessage.warning(`${name} 已在列表中`); return }
+  if (!name) { toast.warning('请先选择供应商'); return }
+  if (editConfig.value.priority.includes(name)) { toast.warning(`${name} 已在列表中`); return }
   editConfig.value.priority.push(name)
   addSelection.value = ''
 }
@@ -268,12 +269,12 @@ async function saveFailoverConfig() {
   failoverSaving.value = true
   try {
     await updateFailoverConfig(editConfig.value)
-    ElMessage.success('故障转移配置已保存')
+    toast.success('故障转移配置已保存')
     failoverConfig.value = { ...editConfig.value }
     editDialogVisible.value = false
     loadProviders()
   } catch {
-    ElMessage.error('保存失败')
+    toast.error('保存失败')
   } finally {
     failoverSaving.value = false
   }
@@ -295,7 +296,7 @@ async function loadConversations() {
     convList.value = res.records
     convTotal.value = res.total
   } catch {
-    ElMessage.error('加载对话记录失败')
+    toast.error('加载对话记录失败')
   } finally {
     convLoading.value = false
   }
@@ -319,7 +320,7 @@ async function handleViewConversation(row: any) {
   try {
     detailMessages.value = await getAiConversationMessages(row.id)
   } catch {
-    ElMessage.error('加载对话内容失败')
+    toast.error('加载对话内容失败')
   } finally {
     detailLoading.value = false
   }

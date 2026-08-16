@@ -5,7 +5,8 @@
 // 功能：限流器配置、熔断器配置、缓存管理、邮件配置
 // ============================================================
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import {
   getRateLimiters,
   updateRateLimiter,
@@ -74,17 +75,17 @@ function cancelEditRateLimiter() {
 
 function validateRateLimiter(): boolean {
   if (!rateEditForm.limitForPeriod || rateEditForm.limitForPeriod < 1 || rateEditForm.limitForPeriod > 10000) {
-    ElMessage.warning('周期限制数范围: 1-10000')
+    toast.warning('周期限制数范围: 1-10000')
     return false
   }
   const refreshSecs = parseDurationToSeconds(rateEditForm.limitRefreshPeriod)
   if (refreshSecs === null || refreshSecs < 1 || refreshSecs > 3600) {
-    ElMessage.warning('刷新周期范围: 1s-1h（格式如 1s、1m、1h）')
+    toast.warning('刷新周期范围: 1s-1h（格式如 1s、1m、1h）')
     return false
   }
   const timeoutSecs = parseDurationToSeconds(rateEditForm.timeoutDuration)
   if (timeoutSecs === null || timeoutSecs < 0 || timeoutSecs > 60) {
-    ElMessage.warning('超时时间范围: 0s-60s（格式如 0s、1s、1m）')
+    toast.warning('超时时间范围: 0s-60s（格式如 0s、1s、1m）')
     return false
   }
   return true
@@ -94,7 +95,7 @@ async function saveRateLimiter() {
   if (!validateRateLimiter()) return
   try {
     await updateRateLimiter(rateEditForm.name, rateEditForm)
-    ElMessage.success('限流器配置已更新，实时生效')
+    toast.success('限流器配置已更新，实时生效')
     rateEditing.value = null
     loadRateLimiters()
   } catch {
@@ -126,20 +127,20 @@ function cancelEditCb() {
 
 function validateCircuitBreaker(): boolean {
   if (!cbEditForm.failureRateThreshold || cbEditForm.failureRateThreshold < 1 || cbEditForm.failureRateThreshold > 100) {
-    ElMessage.warning('失败率阈值范围: 1-100')
+    toast.warning('失败率阈值范围: 1-100')
     return false
   }
   if (!cbEditForm.slowCallRateThreshold || cbEditForm.slowCallRateThreshold < 1 || cbEditForm.slowCallRateThreshold > 100) {
-    ElMessage.warning('慢调用率阈值范围: 1-100')
+    toast.warning('慢调用率阈值范围: 1-100')
     return false
   }
   const waitSecs = parseDurationToSeconds(cbEditForm.waitDurationInOpenState)
   if (waitSecs === null || waitSecs < 1 || waitSecs > 600) {
-    ElMessage.warning('开启等待时间范围: 1s-10min（格式如 1s、1m、10m）')
+    toast.warning('开启等待时间范围: 1s-10min（格式如 1s、1m、10m）')
     return false
   }
   if (!cbEditForm.permittedNumberOfCallsInHalfOpenState || cbEditForm.permittedNumberOfCallsInHalfOpenState < 1) {
-    ElMessage.warning('半开调用数必须大于 0')
+    toast.warning('半开调用数必须大于 0')
     return false
   }
   return true
@@ -149,7 +150,7 @@ async function saveCircuitBreaker() {
   if (!validateCircuitBreaker()) return
   try {
     await updateCircuitBreaker(cbEditForm.name, cbEditForm)
-    ElMessage.success('熔断器配置已更新，实时生效')
+    toast.success('熔断器配置已更新，实时生效')
     cbEditing.value = null
     loadCircuitBreakers()
   } catch {
@@ -178,7 +179,7 @@ async function handleClearCache(name: string) {
       { type: 'warning', confirmButtonText: '确认清除', cancelButtonText: '取消' }
     )
     await clearCache(name)
-    ElMessage.success('缓存已清除')
+    toast.success('缓存已清除')
     loadCacheStats()
   } catch (err) {
     // 用户取消或拦截器已提示
@@ -209,21 +210,21 @@ async function loadEmailConfig() {
 async function saveEmailConfig() {
   if (!emailConfig.value) return
   if (!emailConfig.value.host || !emailConfig.value.host.trim()) {
-    ElMessage.warning('SMTP 服务器地址不能为空')
+    toast.warning('SMTP 服务器地址不能为空')
     return
   }
   if (!emailConfig.value.port || emailConfig.value.port < 1 || emailConfig.value.port > 65535) {
-    ElMessage.warning('端口范围: 1-65535')
+    toast.warning('端口范围: 1-65535')
     return
   }
   if (!emailConfig.value.username || !emailConfig.value.username.trim()) {
-    ElMessage.warning('SMTP 用户名不能为空')
+    toast.warning('SMTP 用户名不能为空')
     return
   }
   emailSaving.value = true
   try {
     await updateEmailConfig(emailConfig.value)
-    ElMessage.success('邮件配置已保存')
+    toast.success('邮件配置已保存')
   } catch {
     // 拦截器已提示
   } finally {
@@ -234,21 +235,21 @@ async function saveEmailConfig() {
 async function handleSendTestEmail() {
   if (!emailConfig.value) return
   if (!emailConfig.value.host || !emailConfig.value.host.trim()) {
-    ElMessage.warning('SMTP 服务器地址不能为空')
+    toast.warning('SMTP 服务器地址不能为空')
     return
   }
   if (!emailConfig.value.port || emailConfig.value.port < 1 || emailConfig.value.port > 65535) {
-    ElMessage.warning('端口范围: 1-65535')
+    toast.warning('端口范围: 1-65535')
     return
   }
   if (!emailConfig.value.username || !emailConfig.value.username.trim()) {
-    ElMessage.warning('SMTP 用户名不能为空')
+    toast.warning('SMTP 用户名不能为空')
     return
   }
   emailTesting.value = true
   try {
     await sendTestEmail(emailConfig.value)
-    ElMessage.success('测试邮件已发送，请查收')
+    toast.success('测试邮件已发送，请查收')
   } catch {
     // 拦截器已提示
   } finally {

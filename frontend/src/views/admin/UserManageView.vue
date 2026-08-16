@@ -5,7 +5,8 @@
 // 功能：用户列表检索、封禁/解封、角色变更、密码重置
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { getUserList, banUser, unbanUser, changeUserRole, resetUserPassword } from '@/api/admin'
 import { isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import type { SystemUser, UserQueryParams, UserStatus, UserRole } from '@/types/admin'
@@ -75,7 +76,7 @@ async function loadData() {
     tableData.value = res.records
     total.value = res.total
   } catch {
-    ElMessage.error('加载用户列表失败')
+    toast.error('加载用户列表失败')
   } finally {
     loading.value = false
   }
@@ -116,17 +117,17 @@ function openBanDialog(row: any) {
 
 async function confirmBan() {
   if (!banForm.reason.trim()) {
-    ElMessage.warning('请输入封禁原因')
+    toast.warning('请输入封禁原因')
     return
   }
   try {
     const duration = banForm.type === 'temp' ? `${banForm.duration}天` : '永久'
     await banUser(banForm.userId, banForm.type, duration, banForm.reason)
-    ElMessage.success('已封禁')
+    toast.success('已封禁')
     banDialogVisible.value = false
     loadData()
   } catch {
-    ElMessage.error('操作失败')
+    toast.error('操作失败')
   }
 }
 
@@ -134,7 +135,7 @@ async function handleUnban(row: any) {
   try {
     await ElMessageBox.confirm(`确定解封用户 ${row.nickname} 吗？`, '解封确认', { type: 'warning' })
     await unbanUser(row.id)
-    ElMessage.success('已解封')
+    toast.success('已解封')
     loadData()
   } catch {
     // 用户取消
@@ -152,11 +153,11 @@ function openRoleDialog(row: any) {
 async function confirmRoleChange() {
   try {
     await changeUserRole(roleForm.userId, roleForm.role, roleForm.reason)
-    ElMessage.success('角色已更新')
+    toast.success('角色已更新')
     roleDialogVisible.value = false
     loadData()
   } catch {
-    ElMessage.error('操作失败')
+    toast.error('操作失败')
   }
 }
 
@@ -164,7 +165,7 @@ async function handleResetPassword(row: any) {
   try {
     await ElMessageBox.confirm(`确定重置用户 ${row.nickname} 的密码吗？`, '密码重置', { type: 'warning' })
     await resetUserPassword(row.id)
-    ElMessage.success('密码已重置，重置链接已发送至用户邮箱')
+    toast.success('密码已重置，重置链接已发送至用户邮箱')
   } catch {
     // 用户取消
   }

@@ -5,7 +5,7 @@
 // 功能：操作日志检索、查看详情
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { getOperationLogs } from '@/api/admin'
 import type { OperationLog, LogQueryParams, OperationType } from '@/types/admin'
 import type { PageResult } from '@/types'
@@ -101,7 +101,7 @@ async function loadData() {
     tableData.value = res.records
     total.value = res.total
   } catch {
-    ElMessage.error('加载操作日志失败')
+    toast.error('加载操作日志失败')
   } finally {
     loading.value = false
   }

@@ -5,7 +5,7 @@
 // 功能：群组列表检索、解散群组
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { getGroupList, dissolveGroup } from '@/api/admin'
 import { isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import type { SystemGroup, GroupQueryParams, GroupStatus } from '@/types/admin'
@@ -43,7 +43,7 @@ async function loadData() {
     tableData.value = res.records
     total.value = res.total
   } catch {
-    ElMessage.error('加载群组列表失败')
+    toast.error('加载群组列表失败')
   } finally {
     loading.value = false
   }
@@ -82,16 +82,16 @@ function openDissolveDialog(row: any) {
 
 async function confirmDissolve() {
   if (!dissolveForm.reason.trim()) {
-    ElMessage.warning('请输入解散原因')
+    toast.warning('请输入解散原因')
     return
   }
   try {
     await dissolveGroup(dissolveForm.groupId, dissolveForm.reason)
-    ElMessage.success('群组已解散')
+    toast.success('群组已解散')
     dissolveDialogVisible.value = false
     loadData()
   } catch {
-    ElMessage.error('操作失败')
+    toast.error('操作失败')
   }
 }
 

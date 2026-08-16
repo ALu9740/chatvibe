@@ -5,7 +5,8 @@
 // 功能：消息检索、查看详情（含图片/文件预览）、删除违规消息
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import { searchMessages, deleteMessage } from '@/api/admin'
 import { resolveUploadUrl } from '@/utils/format'
 import type { AuditMessage, MessageSearchParams, AdminMessageType } from '@/types/admin'
@@ -94,7 +95,7 @@ async function loadData() {
     tableData.value = res.records
     total.value = res.total
   } catch {
-    ElMessage.error('加载消息列表失败')
+    toast.error('加载消息列表失败')
   } finally {
     loading.value = false
   }
@@ -140,16 +141,16 @@ function openDeleteDialog(row: any) {
 
 async function confirmDelete() {
   if (!deleteForm.reason.trim()) {
-    ElMessage.warning('请输入删除原因')
+    toast.warning('请输入删除原因')
     return
   }
   try {
     await deleteMessage(deleteForm.messageId, deleteForm.reason)
-    ElMessage.success('消息已删除')
+    toast.success('消息已删除')
     deleteDialogVisible.value = false
     loadData()
   } catch {
-    ElMessage.error('操作失败')
+    toast.error('操作失败')
   }
 }
 

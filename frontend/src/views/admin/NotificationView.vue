@@ -8,7 +8,8 @@
 //   5.8.3 通知发送记录（只读查询、多条件筛选）
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
+import { toast } from '@/utils/toast'
 import {
   getAnnouncementList,
   createAnnouncement,
@@ -67,7 +68,7 @@ async function loadAnnouncements() {
     annTableData.value = res.records
     annTotal.value = res.total
   } catch {
-    ElMessage.error('加载公告列表失败')
+    toast.error('加载公告列表失败')
   } finally {
     annLoading.value = false
   }
@@ -112,15 +113,15 @@ async function searchUsers(query: string) {
 /** 预览公告 */
 function handlePreview() {
   if (!createForm.title.trim()) {
-    ElMessage.warning('请输入公告标题')
+    toast.warning('请输入公告标题')
     return
   }
   if (!createForm.content.trim()) {
-    ElMessage.warning('请输入公告内容')
+    toast.warning('请输入公告内容')
     return
   }
   if (createForm.scope === 'specified' && (!createForm.targetUserIds || createForm.targetUserIds.length === 0)) {
-    ElMessage.warning('指定用户范围请至少选择一名用户')
+    toast.warning('指定用户范围请至少选择一名用户')
     return
   }
   previewDialogVisible.value = true
@@ -129,26 +130,26 @@ function handlePreview() {
 /** 确认发布 */
 async function confirmCreate() {
   if (!createForm.title.trim()) {
-    ElMessage.warning('请输入公告标题')
+    toast.warning('请输入公告标题')
     return
   }
   if (!createForm.content.trim()) {
-    ElMessage.warning('请输入公告内容')
+    toast.warning('请输入公告内容')
     return
   }
   if (createForm.scope === 'specified' && (!createForm.targetUserIds || createForm.targetUserIds.length === 0)) {
-    ElMessage.warning('指定用户范围请至少选择一名用户')
+    toast.warning('指定用户范围请至少选择一名用户')
     return
   }
   creating.value = true
   try {
     await createAnnouncement(createForm)
-    ElMessage.success('公告已发布，通知正在异步发送中')
+    toast.success('公告已发布，通知正在异步发送中')
     createDialogVisible.value = false
     previewDialogVisible.value = false
     loadAnnouncements()
   } catch {
-    ElMessage.error('发布失败')
+    toast.error('发布失败')
   } finally {
     creating.value = false
   }
@@ -162,7 +163,7 @@ async function handleWithdraw(row: any) {
       { type: 'warning', confirmButtonText: '确认撤回', cancelButtonText: '取消' }
     )
     await withdrawAnnouncement(row.id)
-    ElMessage.success('公告已撤回')
+    toast.success('公告已撤回')
     loadAnnouncements()
   } catch {
     // 用户取消
@@ -213,7 +214,7 @@ async function loadNotifications() {
     notifTableData.value = res.records
     notifTotal.value = res.total
   } catch {
-    ElMessage.error('加载通知记录失败')
+    toast.error('加载通知记录失败')
   } finally {
     notifLoading.value = false
   }
