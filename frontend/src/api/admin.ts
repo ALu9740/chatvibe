@@ -79,19 +79,19 @@ export function getUserList(params: UserQueryParams): Promise<PageResult<SystemU
 }
 
 export function banUser(userId: number, type: 'temp' | 'permanent', duration: string, reason: string): Promise<boolean> {
-  return request.post<unknown, boolean>(`/admin/users/${userId}/ban`, { type, duration, reason })
+  return request.post<unknown, boolean>(`/admin/users/${userId}/ban`, { type, duration, reason }, { _skipToast: true } as Record<string, unknown>)
 }
 
 export function unbanUser(userId: number): Promise<boolean> {
-  return request.post<unknown, boolean>(`/admin/users/${userId}/unban`)
+  return request.post<unknown, boolean>(`/admin/users/${userId}/unban`, undefined, { _skipToast: true } as Record<string, unknown>)
 }
 
 export function changeUserRole(userId: number, role: string, reason?: string): Promise<boolean> {
-  return request.put<unknown, boolean>(`/admin/users/${userId}/role`, { role, reason })
+  return request.put<unknown, boolean>(`/admin/users/${userId}/role`, { role, reason }, { _skipToast: true } as Record<string, unknown>)
 }
 
 export function resetUserPassword(userId: number): Promise<boolean> {
-  return request.post<unknown, boolean>(`/admin/users/${userId}/reset-password`)
+  return request.post<unknown, boolean>(`/admin/users/${userId}/reset-password`, undefined, { _skipToast: true } as Record<string, unknown>)
 }
 
 // ============================================================

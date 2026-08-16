@@ -68,6 +68,10 @@ public class RabbitMQConfig {
     public static final String ANNOUNCEMENT_QUEUE = "announcement.publish.event";
     public static final String ANNOUNCEMENT_ROUTING_KEY = "announcement.publish.#";
 
+    // 用户封禁/解封事件
+    public static final String USER_BAN_QUEUE = "user.ban.event";
+    public static final String USER_BAN_ROUTING_KEY = "user.ban.#";
+
     @Bean
     public Queue groupRemoveQueue() {
         return QueueBuilder.durable(GROUP_REMOVE_QUEUE).build();
@@ -104,6 +108,19 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(announcementQueue())
                 .to(chatExchange())
                 .with(ANNOUNCEMENT_ROUTING_KEY);
+    }
+
+    /** 用户封禁/解封事件队列 */
+    @Bean
+    public Queue userBanQueue() {
+        return QueueBuilder.durable(USER_BAN_QUEUE).build();
+    }
+
+    @Bean
+    public Binding userBanBinding() {
+        return BindingBuilder.bind(userBanQueue())
+                .to(chatExchange())
+                .with(USER_BAN_ROUTING_KEY);
     }
 
     /** 群邀请事件队列 */

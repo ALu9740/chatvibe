@@ -4,13 +4,20 @@
 // 对应 PRD 5.4 用户管理
 // 功能：用户列表检索、封禁/解封、角色变更、密码重置
 // ============================================================
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessageBox } from 'element-plus'
 import { toast } from '@/utils/toast'
 import { getUserList, banUser, unbanUser, changeUserRole, resetUserPassword } from '@/api/admin'
+import { useAdminAuthStore } from '@/stores/adminAuth'
 import { isAvatarUrl, resolveUploadUrl } from '@/utils/format'
 import type { SystemUser, UserQueryParams, UserStatus, UserRole } from '@/types/admin'
+import type { AdminRole } from '@/types/admin'
 import type { PageResult } from '@/types'
+
+const adminAuthStore = useAdminAuthStore()
+
+/** 当前登录管理员角色 */
+const currentRole = computed<AdminRole>(() => adminAuthStore.admin?.role || 'OPERATOR')
 
 const loading = ref(false)
 const tableData = ref<SystemUser[]>([])
@@ -50,11 +57,23 @@ const roleTagType: Record<UserRole, any> = {
   SUPER_ADMIN: 'danger'
 }
 
+/** 角色变更下拉可选角色（按当前管理员角色过滤） */
+const availableRoles = computed(() => {
+  if (currentRole.value === 'SUPER_ADMIN') {
+    return roleOptions.filter((r) => r.value !== 'SUPER_ADMIN')
+  }
+  if (currentRole.value === 'ADMIN') {
+    return roleOptions.filter((r) => r.value === 'OPERATOR' || r.value === 'USER')
+  }
+  return roleOptions
+})
+
 // 封禁对话框
 const banDialogVisible = ref(false)
 const banForm = reactive({
   userId: 0,
   userNickname: '',
+  userRole: 'USER' as UserRole,
   type: 'temp' as 'temp' | 'permanent',
   duration: '7',
   reason: ''
@@ -107,8 +126,13 @@ function handleSizeChange(size: number) {
 }
 
 function openBanDialog(row: any) {
+  if (currentRole.value === 'ADMIN' && row.role !== 'USER') {
+    toast.error('操作失败', '无权限操作')
+    return
+  }
   banForm.userId = row.id
   banForm.userNickname = row.nickname
+  banForm.userRole = row.role
   banForm.type = 'temp'
   banForm.duration = '7'
   banForm.reason = ''
@@ -123,26 +147,38 @@ async function confirmBan() {
   try {
     const duration = banForm.type === 'temp' ? `${banForm.duration}天` : '永久'
     await banUser(banForm.userId, banForm.type, duration, banForm.reason)
-    toast.success('已封禁')
+    toast.success('已封禁', '封禁邮件已发送至用户邮箱')
     banDialogVisible.value = false
     loadData()
-  } catch {
-    toast.error('操作失败')
+  } catch (err) {
+    toast.error('操作失败', (err as Error).message || '操作失败')
   }
 }
 
 async function handleUnban(row: any) {
+  if (currentRole.value === 'ADMIN' && row.role !== 'USER') {
+    toast.error('操作失败', '无权限操作')
+    return
+  }
   try {
     await ElMessageBox.confirm(`确定解封用户 ${row.nickname} 吗？`, '解封确认', { type: 'warning' })
-    await unbanUser(row.id)
-    toast.success('已解封')
-    loadData()
   } catch {
-    // 用户取消
+    return // 用户取消
+  }
+  try {
+    await unbanUser(row.id)
+    toast.success('已解封', '解封邮件已发送至用户邮箱')
+    loadData()
+  } catch (err) {
+    toast.error('操作失败', (err as Error).message || '操作失败')
   }
 }
 
 function openRoleDialog(row: any) {
+  if (currentRole.value === 'ADMIN' && (row.role === 'SUPER_ADMIN' || row.role === 'ADMIN')) {
+    toast.error('操作失败', '无权限操作')
+    return
+  }
   roleForm.userId = row.id
   roleForm.userNickname = row.nickname
   roleForm.role = row.role
@@ -156,18 +192,26 @@ async function confirmRoleChange() {
     toast.success('角色已更新')
     roleDialogVisible.value = false
     loadData()
-  } catch {
-    toast.error('操作失败')
+  } catch (err) {
+    toast.error('操作失败', (err as Error).message || '操作失败')
   }
 }
 
 async function handleResetPassword(row: any) {
+  if (currentRole.value === 'ADMIN' && row.role === 'SUPER_ADMIN') {
+    toast.error('操作失败', '无权限操作')
+    return
+  }
   try {
     await ElMessageBox.confirm(`确定重置用户 ${row.nickname} 的密码吗？`, '密码重置', { type: 'warning' })
-    await resetUserPassword(row.id)
-    toast.success('密码已重置，重置链接已发送至用户邮箱')
   } catch {
-    // 用户取消
+    return // 用户取消
+  }
+  try {
+    await resetUserPassword(row.id)
+    toast.success('密码已重置', '新密码已发送至用户邮箱')
+  } catch (err) {
+    toast.error('操作失败', (err as Error).message || '操作失败')
   }
 }
 
@@ -315,7 +359,7 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="新角色">
           <el-select v-model="roleForm.role" style="width: 100%">
-            <el-option v-for="opt in roleOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
+            <el-option v-for="opt in availableRoles" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
         <el-form-item label="变更原因">

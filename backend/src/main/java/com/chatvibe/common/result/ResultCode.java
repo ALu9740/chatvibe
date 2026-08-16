@@ -73,7 +73,8 @@ public enum ResultCode {
     AI_PROVIDER_TEST_FAILED(7008, "供应商连接测试失败"),
     CONFIG_NOT_FOUND(7009, "系统配置不存在"),
     CANNOT_BAN_ADMIN(7010, "不能封禁管理员账号"),
-    CANNOT_CHANGE_OWN_ROLE(7011, "不能修改自己的角色");
+    CANNOT_CHANGE_OWN_ROLE(7011, "不能修改自己的角色"),
+    NO_PERMISSION(7012, "无权限操作");
 
     private final Integer code;
     private final String message;

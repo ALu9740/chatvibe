@@ -9,6 +9,8 @@ import com.chatvibe.module.admin.enums.OperationTypeEnum;
 import com.chatvibe.module.admin.service.AdminLogService;
 import com.chatvibe.module.admin.service.AdminUserService;
 import com.chatvibe.module.admin.vo.SystemUserVO;
+import com.chatvibe.module.auth.event.UserBanEvent;
+import com.chatvibe.module.auth.event.UserBanEventProducer;
 import com.chatvibe.module.auth.event.UserPasswordResetEvent;
 import com.chatvibe.module.auth.event.UserPasswordResetEventProducer;
 import com.chatvibe.module.user.entity.User;
@@ -47,6 +49,7 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final AdminLogService adminLogService;
     private final PasswordEncoder passwordEncoder;
     private final UserPasswordResetEventProducer passwordResetEventProducer;
+    private final UserBanEventProducer userBanEventProducer;
 
     @Override
     public PageResult<SystemUserVO> getUserList(String keyword, String status, String role, int page, int size) {
@@ -106,9 +109,20 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
-        if (UserRoleEnum.isAdminRole(user.getRole())) {
+
+        // 权限分级校验
+        String currentAdminRole = SecurityUtils.getCurrentUser().getRole();
+        String targetRole = user.getRole();
+        // 任何人都不能封禁超级管理员
+        if (UserRoleEnum.SUPER_ADMIN.getCode().equals(targetRole)) {
             throw new BusinessException(ResultCode.CANNOT_BAN_ADMIN);
         }
+        // 管理员只能封禁普通用户
+        if (UserRoleEnum.ADMIN.getCode().equals(currentAdminRole)
+                && !UserRoleEnum.USER.getCode().equals(targetRole)) {
+            throw new BusinessException(ResultCode.NO_PERMISSION);
+        }
+
         if (user.getBanned() != null && user.getBanned() == 1) {
             throw new BusinessException(ResultCode.USER_ALREADY_BANNED);
         }
@@ -117,6 +131,21 @@ public class AdminUserServiceImpl implements AdminUserService {
         userMapper.updateById(user);
         adminLogService.log(OperationTypeEnum.USER_BAN, "封禁用户: " + user.getEmail() + ", 原因: " + reason);
         log.info("[管理员] 封禁用户成功: userId={}, email={}, type={}, duration={}", userId, user.getEmail(), type, duration);
+
+        // 事务提交后异步发送封禁通知邮件（MQ 解耦，不阻塞响应）
+        final String email = user.getEmail();
+        final String nickname = user.getNickname();
+        final long banTime = System.currentTimeMillis();
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        userBanEventProducer.sendBanEvent(
+                                new UserBanEvent(userId, email, nickname, true, reason, type, duration, banTime));
+                    }
+                }
+        );
+
         return true;
     }
 
@@ -127,6 +156,15 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
+
+        // 权限分级校验：管理员只能解封普通用户
+        String currentAdminRole = SecurityUtils.getCurrentUser().getRole();
+        String targetRole = user.getRole();
+        if (UserRoleEnum.ADMIN.getCode().equals(currentAdminRole)
+                && !UserRoleEnum.USER.getCode().equals(targetRole)) {
+            throw new BusinessException(ResultCode.NO_PERMISSION);
+        }
+
         if (user.getBanned() == null || user.getBanned() == 0) {
             throw new BusinessException(ResultCode.USER_NOT_BANNED);
         }
@@ -135,6 +173,21 @@ public class AdminUserServiceImpl implements AdminUserService {
         userMapper.updateById(user);
         adminLogService.log(OperationTypeEnum.USER_UNBAN, "解封用户: " + user.getEmail());
         log.info("[管理员] 解封用户成功: userId={}, email={}", userId, user.getEmail());
+
+        // 事务提交后异步发送解封通知邮件（MQ 解耦，不阻塞响应）
+        final String email = user.getEmail();
+        final String nickname = user.getNickname();
+        final long unbanTime = System.currentTimeMillis();
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        userBanEventProducer.sendBanEvent(
+                                new UserBanEvent(userId, email, nickname, false, null, null, null, unbanTime));
+                    }
+                }
+        );
+
         return true;
     }
 
@@ -153,6 +206,20 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_FOUND);
         }
+
+        // 权限分级校验：管理员不能修改管理员/超级管理员角色，且只能设为运营或普通用户
+        String currentAdminRole = SecurityUtils.getCurrentUser().getRole();
+        if (UserRoleEnum.ADMIN.getCode().equals(currentAdminRole)) {
+            if (UserRoleEnum.ADMIN.getCode().equals(user.getRole())
+                    || UserRoleEnum.SUPER_ADMIN.getCode().equals(user.getRole())) {
+                throw new BusinessException(ResultCode.NO_PERMISSION);
+            }
+            if (!UserRoleEnum.OPERATOR.getCode().equals(role)
+                    && !UserRoleEnum.USER.getCode().equals(role)) {
+                throw new BusinessException(ResultCode.NO_PERMISSION);
+            }
+        }
+
         user.setRole(role);
         userMapper.updateById(user);
         adminLogService.log(OperationTypeEnum.ROLE_CHANGE, "修改用户角色: " + user.getEmail() + ", 新角色: " + role + ", 原因: " + reason);
