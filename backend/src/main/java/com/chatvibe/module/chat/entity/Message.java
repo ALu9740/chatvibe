@@ -57,6 +57,12 @@ public class Message extends BaseEntity {
     private Integer status;
 
     /**
+     * AI供应商(仅AI回复消息有值，记录生成该消息的供应商)
+     * 用于管理员后台按供应商统计AI消息分布，避免会话级供应商切换导致历史消息归属错误
+     */
+    private String provider;
+
+    /**
      * 发送者昵称（非数据库字段，查询时 JOIN user 表填充，用于群聊展示）
      */
     @TableField(exist = false)

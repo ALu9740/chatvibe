@@ -252,6 +252,7 @@ export interface AiConversationMessage {
   type: number
   content: string
   isAi: boolean
+  provider?: string
   createdAt: string
 }
 

@@ -442,6 +442,7 @@ public class AdminAiServiceImpl implements AdminAiService {
                 vo.setIsAi(true);
                 vo.setSenderName("Vibe助手");
                 vo.setSenderAvatar("🤖");
+                vo.setProvider(msg.getProvider());
             } else {
                 vo.setIsAi(false);
                 User user = userMap.get(msg.getSenderId());

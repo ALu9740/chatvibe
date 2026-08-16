@@ -93,7 +93,7 @@ public interface MessageMapper extends BaseMapper<Message> {
 
     /**
      * 统计指定时间范围内 AI 回复消息的供应商分布
-     * 通过 JOIN conversation 表获取 ai_provider 字段
+     * 优先使用消息级别的 provider 字段，旧消息回退到会话级别的 ai_provider/provider
      *
      * @param startTime 起始时间
      * @return 供应商分布列表，每项包含 provider(String) 和 count(Long)

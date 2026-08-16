@@ -88,6 +88,14 @@ function statusTagType(status: string): any {
   return 'danger'
 }
 
+/** 格式化时间为短格式: "2026-08-16 13:53:42" → "08-16 13:53" */
+function formatShortTime(timeStr: string): string {
+  if (!timeStr) return '—'
+  // 取 MM-DD HH:mm 部分
+  const match = timeStr.match(/\d{4}-(\d{2}-\d{2} \d{2}:\d{2})/)
+  return match ? match[1] : timeStr
+}
+
 function statusText(status: string): string {
   if (status === 'online') return '在线'
   if (status === 'checking') return '检测中'
@@ -467,27 +475,30 @@ onMounted(() => {
         <el-button type="primary" size="small" @click="handleConvSearch">查询</el-button>
       </div>
       <el-table :data="convList" v-loading="convLoading" stripe style="width: 100%">
-        <el-table-column label="对话ID" prop="id" width="90" />
-        <el-table-column label="用户" min-width="120">
+        <el-table-column label="ID" prop="id" width="70" />
+        <el-table-column label="用户" width="130">
           <template #default="{ row }">
             <span>{{ row.userNickname }}</span>
             <span class="user-id-text">(ID: {{ row.userId }})</span>
           </template>
         </el-table-column>
-        <el-table-column label="对话标题" prop="title" min-width="200" show-overflow-tooltip />
-        <el-table-column label="供应商" width="100">
+        <el-table-column label="供应商" width="140" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag :type="row.provider === 'ollama' ? 'success' : 'primary'" size="small">{{ row.provider || '—' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="模型" width="150">
+        <el-table-column label="模型" width="170" show-overflow-tooltip>
           <template #default="{ row }">
             <span>{{ row.model || '—' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="消息数" prop="messageCount" width="90" align="center" />
-        <el-table-column label="最后提问时间" prop="lastMessageAt" width="160" />
-        <el-table-column label="操作" width="80" fixed="right">
+        <el-table-column label="消息数" prop="messageCount" width="70" align="center" />
+        <el-table-column label="最后提问" min-width="120">
+          <template #default="{ row }">
+            {{ formatShortTime(row.lastMessageAt) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="60" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="handleViewConversation(row)">查看</el-button>
           </template>
@@ -615,6 +626,7 @@ onMounted(() => {
             <div class="msg-meta">
               <span class="msg-sender">{{ msg.senderName }}</span>
               <el-tag v-if="msg.isAi" type="success" size="small" class="msg-role-tag">AI</el-tag>
+              <el-tag v-if="msg.isAi && msg.provider" :type="msg.provider === 'ollama' ? 'success' : 'primary'" size="small" class="msg-role-tag">{{ msg.provider }}</el-tag>
               <span class="msg-time">{{ msg.createdAt }}</span>
             </div>
             <div class="msg-content">{{ msg.content }}</div>

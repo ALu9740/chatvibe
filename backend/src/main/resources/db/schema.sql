@@ -99,6 +99,7 @@ CREATE TABLE `message` (
     `content`         TEXT                     DEFAULT NULL COMMENT '消息内容',
     `extra`           TEXT                     DEFAULT NULL COMMENT '附加信息(JSON): 文件名/大小/尺寸/宽高等',
     `status`          TINYINT         NOT NULL DEFAULT 0 COMMENT '状态: 0-已发送 1-已送达 2-已读',
+    `provider`        VARCHAR(50)              DEFAULT NULL COMMENT 'AI供应商(仅AI回复消息有值，记录生成该消息的供应商)',
     `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `deleted`         TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除: 0-未删除 1-已删除',
@@ -285,3 +286,13 @@ CREATE TABLE `system_config` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_config_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统配置表';
+
+-- ============================================================
+-- 增量迁移（已有数据库执行）
+-- ============================================================
+
+-- message 表新增 provider 列：记录 AI 回复消息的供应商（消息级别）
+-- 解决会话切换供应商后，历史 AI 消息被错误归属到最新供应商的问题
+ALTER TABLE `message`
+    ADD COLUMN `provider` VARCHAR(50) DEFAULT NULL COMMENT 'AI供应商(仅AI回复消息有值，记录生成该消息的供应商)'
+    AFTER `status`;

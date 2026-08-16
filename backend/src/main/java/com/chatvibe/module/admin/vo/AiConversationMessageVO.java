@@ -49,6 +49,11 @@ public class AiConversationMessageVO {
     private Boolean isAi;
 
     /**
+     * AI供应商(仅AI消息有值，记录生成该消息的供应商)
+     */
+    private String provider;
+
+    /**
      * 发送时间(格式化字符串)
      */
     private String createdAt;

@@ -119,22 +119,22 @@ public class AiController {
 
         // 记录当前使用的供应商和模型到会话（管理员后台可按供应商筛选）
         // chatConvId 是 conversation 表的会话 ID（type=3 AI会话），直接更新该表的 aiProvider/aiModel 字段
+        // 同时将 provider 保存到消息级别，避免会话切换供应商后历史消息归属错误
+        String currentProvider;
+        String currentModel;
+        if (!aiProviderRegistry.getProviders().isEmpty()) {
+            var primary = aiProviderRegistry.getProviders().get(0);
+            currentProvider = primary.name();
+            currentModel = primary.model();
+        } else {
+            currentProvider = aiService.getProvider();
+            currentModel = null;
+        }
         if (chatConvId != null) {
-            String providerName;
-            String modelName;
-            if (!aiProviderRegistry.getProviders().isEmpty()) {
-                var primary = aiProviderRegistry.getProviders().get(0);
-                providerName = primary.name();
-                modelName = primary.model();
-            } else {
-                // 供应商注册表为空时回退到 AiService 默认供应商
-                providerName = aiService.getProvider();
-                modelName = null;
-            }
             conversationMapper.update(null, new LambdaUpdateWrapper<Conversation>()
                     .eq(Conversation::getId, chatConvId)
-                    .set(Conversation::getAiProvider, providerName)
-                    .set(Conversation::getAiModel, modelName));
+                    .set(Conversation::getAiProvider, currentProvider)
+                    .set(Conversation::getAiModel, currentModel));
         }
 
         // 通过熔断器调用 AI 服务，返回 Flux<String>，订阅后桥接到 SseEmitter
@@ -179,7 +179,7 @@ public class AiController {
                                 emitter.send(SseEmitter.event().name("segment").data(cleaned));
                                 segmentIndex[0]++;
                                 // 落库 + WebSocket 广播此段（已清洗）
-                                saveAndBroadcastAiReply(chatConvId, cleaned);
+                                saveAndBroadcastAiReply(chatConvId, cleaned, currentProvider);
                             }
                         }
 
@@ -226,7 +226,7 @@ public class AiController {
                         if (!lastSegment.isEmpty()) {
                             String cleaned = stripMarkdown(lastSegment);
                             if (!cleaned.isEmpty()) {
-                                saveAndBroadcastAiReply(chatConvId, cleaned);
+                                saveAndBroadcastAiReply(chatConvId, cleaned, currentProvider);
                                 segmentIndex[0]++;
                             }
                         }
@@ -375,12 +375,20 @@ public class AiController {
 
         // 4. 落库 AI 回复（清洗 Markdown 语法）
         String aiReply = stripMarkdown(fullResponse.toString());
+        // 确定当前使用的供应商（记录到消息级别，用于管理员后台按供应商统计）
+        String currentProvider;
+        if (!aiProviderRegistry.getProviders().isEmpty()) {
+            currentProvider = aiProviderRegistry.getProviders().get(0).name();
+        } else {
+            currentProvider = aiService.getProvider();
+        }
         Message aiMsg = new Message();
         aiMsg.setConversationId(conv.getId());
         aiMsg.setSenderId(AI_SENDER_ID);
         aiMsg.setType(MessageTypeEnum.TYPE_TEXT.getCode());
         aiMsg.setContent(aiReply);
         aiMsg.setStatus(0);
+        aiMsg.setProvider(currentProvider);
         messageMapper.insert(aiMsg);
 
         // 5. 通过 ChatMemory 回写本轮对话（自动维护上下文窗口）
@@ -395,8 +403,7 @@ public class AiController {
             conv.setProvider(primary.name());
             conv.setModel(primary.model());
         } else {
-            // 供应商注册表为空时回退到 AiService 默认供应商
-            conv.setProvider(aiService.getProvider());
+            conv.setProvider(currentProvider);
         }
         aiConversationMapper.updateById(conv);
 
@@ -572,8 +579,12 @@ public class AiController {
     /**
      * 落库 AI 回复到常规会话 + WebSocket 广播给所有成员 + 更新会话最后消息。
      * senderId=0 无 user 记录，手动填充 Vibe助手 昵称与头像。
+     *
+     * @param conversationId 会话ID
+     * @param reply          AI 回复内容（已清洗 Markdown）
+     * @param provider       生成此回复的 AI 供应商名称（记录到消息级别，用于管理员后台按供应商统计）
      */
-    private void saveAndBroadcastAiReply(Long conversationId, String reply) {
+    private void saveAndBroadcastAiReply(Long conversationId, String reply, String provider) {
         if (conversationId == null || StrUtil.isBlank(reply)) {
             return;
         }
@@ -584,6 +595,7 @@ public class AiController {
             aiMsg.setType(MessageTypeEnum.TYPE_TEXT.getCode());
             aiMsg.setContent(reply);
             aiMsg.setStatus(0);
+            aiMsg.setProvider(provider);
             aiMsg.setSenderName(AI_SENDER_NAME);
             aiMsg.setSenderAvatar(AI_SENDER_AVATAR);
             messageMapper.insert(aiMsg);
