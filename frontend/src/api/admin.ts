@@ -244,3 +244,8 @@ export function sendTestEmail(config: EmailConfig): Promise<boolean> {
 export function getOperationLogs(params: LogQueryParams): Promise<PageResult<OperationLog>> {
   return request.get<unknown, PageResult<OperationLog>>('/admin/logs', { params })
 }
+
+/** 导出操作日志（返回筛选后的全量数据） */
+export function exportOperationLogs(params: Omit<LogQueryParams, 'page' | 'size'>): Promise<OperationLog[]> {
+  return request.get<unknown, OperationLog[]>('/admin/logs/export', { params })
+}

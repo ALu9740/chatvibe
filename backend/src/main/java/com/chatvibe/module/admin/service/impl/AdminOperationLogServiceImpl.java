@@ -30,6 +30,7 @@ public class AdminOperationLogServiceImpl implements AdminOperationLogService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int MAX_PAGE_SIZE = 50;
+    private static final int MAX_EXPORT_SIZE = 10000;
 
     private final OperationLogMapper operationLogMapper;
 
@@ -37,6 +38,35 @@ public class AdminOperationLogServiceImpl implements AdminOperationLogService {
     public PageResult<OperationLogVO> getOperationLogs(String operator, String type, String startDate, String endDate, int page, int size) {
         int pageSize = Math.min(size, MAX_PAGE_SIZE);
         Page<OperationLog> pageParam = new Page<>(page, pageSize);
+        LambdaQueryWrapper<OperationLog> wrapper = buildQueryWrapper(operator, type, startDate, endDate);
+        wrapper.orderByDesc(OperationLog::getCreatedAt);
+        Page<OperationLog> result = operationLogMapper.selectPage(pageParam, wrapper);
+
+        List<OperationLogVO> records = new ArrayList<>();
+        for (OperationLog operationLog : result.getRecords()) {
+            records.add(toVO(operationLog));
+        }
+        return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
+    }
+
+    @Override
+    public List<OperationLogVO> getAllOperationLogs(String operator, String type, String startDate, String endDate) {
+        LambdaQueryWrapper<OperationLog> wrapper = buildQueryWrapper(operator, type, startDate, endDate);
+        wrapper.orderByDesc(OperationLog::getCreatedAt);
+        wrapper.last("LIMIT " + MAX_EXPORT_SIZE);
+        List<OperationLog> logs = operationLogMapper.selectList(wrapper);
+
+        List<OperationLogVO> records = new ArrayList<>();
+        for (OperationLog operationLog : logs) {
+            records.add(toVO(operationLog));
+        }
+        return records;
+    }
+
+    /**
+     * 构建查询条件 wrapper（复用于分页查询和导出）
+     */
+    private LambdaQueryWrapper<OperationLog> buildQueryWrapper(String operator, String type, String startDate, String endDate) {
         LambdaQueryWrapper<OperationLog> wrapper = new LambdaQueryWrapper<>();
 
         // 操作者邮箱模糊匹配
@@ -59,14 +89,7 @@ public class AdminOperationLogServiceImpl implements AdminOperationLogService {
             wrapper.le(OperationLog::getCreatedAt, endDateTime);
         }
 
-        wrapper.orderByDesc(OperationLog::getCreatedAt);
-        Page<OperationLog> result = operationLogMapper.selectPage(pageParam, wrapper);
-
-        List<OperationLogVO> records = new ArrayList<>();
-        for (OperationLog operationLog : result.getRecords()) {
-            records.add(toVO(operationLog));
-        }
-        return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), records);
+        return wrapper;
     }
 
     /**

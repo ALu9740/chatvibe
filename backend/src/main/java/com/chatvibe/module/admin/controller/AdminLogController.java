@@ -7,6 +7,8 @@ import com.chatvibe.module.admin.vo.OperationLogVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /**
  * 管理员操作日志接口
  *
@@ -40,5 +42,23 @@ public class AdminLogController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         return Result.success(adminOperationLogService.getOperationLogs(operator, type, startDate, endDate, page, size));
+    }
+
+    /**
+     * 导出操作日志（返回筛选后的全量数据，前端生成Excel）
+     *
+     * @param operator  操作者邮箱
+     * @param type      操作类型
+     * @param startDate 开始日期 yyyy-MM-dd
+     * @param endDate   结束日期 yyyy-MM-dd
+     * @return 操作日志列表
+     */
+    @GetMapping("/export")
+    public Result<List<OperationLogVO>> exportOperationLogs(
+            @RequestParam(required = false) String operator,
+            @RequestParam(required = false) String type,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+        return Result.success(adminOperationLogService.getAllOperationLogs(operator, type, startDate, endDate));
     }
 }

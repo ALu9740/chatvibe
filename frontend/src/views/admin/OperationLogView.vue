@@ -2,15 +2,17 @@
 // ============================================================
 // ChatVibe · 管理员后台 - 操作日志
 // 对应 PRD 5.10 操作日志
-// 功能：操作日志检索、查看详情
+// 功能：操作日志检索、日期范围筛选、查看详情、导出Excel
 // ============================================================
 import { ref, reactive, onMounted } from 'vue'
 import { toast } from '@/utils/toast'
-import { getOperationLogs } from '@/api/admin'
+import { getOperationLogs, exportOperationLogs } from '@/api/admin'
 import type { OperationLog, LogQueryParams, OperationType } from '@/types/admin'
 import type { PageResult } from '@/types'
+import * as XLSX from 'xlsx'
 
 const loading = ref(false)
+const exporting = ref(false)
 const tableData = ref<OperationLog[]>([])
 const total = ref(0)
 
@@ -22,6 +24,9 @@ const queryParams = reactive<LogQueryParams>({
   page: 1,
   size: 10
 })
+
+/** 日期范围（el-date-picker daterange 绑定值 [start, end]） */
+const dateRange = ref<[string, string] | null>(null)
 
 const typeOptions: { label: string; value: OperationType }[] = [
   { label: '登录', value: 'LOGIN' },
@@ -94,6 +99,17 @@ const typeTagType: Record<OperationType, any> = {
   EMAIL_CONFIG: 'warning'
 }
 
+/** 日期范围变更时同步到 queryParams */
+function handleDateChange(val: [string, string] | null) {
+  if (val && val.length === 2) {
+    queryParams.startDate = val[0]
+    queryParams.endDate = val[1]
+  } else {
+    queryParams.startDate = ''
+    queryParams.endDate = ''
+  }
+}
+
 async function loadData() {
   loading.value = true
   try {
@@ -117,6 +133,7 @@ function handleReset() {
   queryParams.type = ''
   queryParams.startDate = ''
   queryParams.endDate = ''
+  dateRange.value = null
   queryParams.page = 1
   loadData()
 }
@@ -130,6 +147,60 @@ function handleSizeChange(size: number) {
   queryParams.size = size
   queryParams.page = 1
   loadData()
+}
+
+/** 导出当前筛选条件下的操作日志为 Excel */
+async function handleExport() {
+  exporting.value = true
+  try {
+    const logs: OperationLog[] = await exportOperationLogs({
+      operator: queryParams.operator,
+      type: queryParams.type,
+      startDate: queryParams.startDate,
+      endDate: queryParams.endDate
+    })
+
+    if (logs.length === 0) {
+      toast.warning('没有可导出的数据')
+      return
+    }
+
+    // 转换为 Excel 行数据（使用中文表头）
+    const rows = logs.map(log => ({
+      '日志ID': log.id,
+      '操作类型': typeTextMap[log.type] || log.type,
+      '操作者邮箱': log.operatorEmail,
+      '操作者ID': log.operatorId,
+      '操作详情': log.detail,
+      'IP地址': log.ip,
+      '操作时间': log.createdAt
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    // 设置列宽
+    ws['!cols'] = [
+      { wch: 8 },   // 日志ID
+      { wch: 16 },  // 操作类型
+      { wch: 24 },  // 操作者邮箱
+      { wch: 10 },  // 操作者ID
+      { wch: 50 },  // 操作详情
+      { wch: 16 },  // IP地址
+      { wch: 20 }   // 操作时间
+    ]
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '操作日志')
+
+    const now = new Date()
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    XLSX.writeFile(wb, `操作日志_${dateStr}.xlsx`)
+
+    toast.success('导出成功', `共导出 ${logs.length} 条记录`)
+  } catch {
+    toast.error('导出失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
 onMounted(() => {
@@ -156,9 +227,24 @@ onMounted(() => {
             <el-option v-for="opt in typeOptions" :key="opt.value" :label="opt.label" :value="opt.value" />
           </el-select>
         </el-form-item>
+        <el-form-item label="日期范围">
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            style="width: 260px"
+            @change="handleDateChange"
+          />
+        </el-form-item>
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" :loading="exporting" @click="handleExport">
+            <el-icon><Download /></el-icon>&nbsp;导出Excel
+          </el-button>
         </el-form-item>
       </el-form>
     </el-card>
