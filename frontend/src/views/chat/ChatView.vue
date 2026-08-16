@@ -665,18 +665,27 @@ async function handleCreateGroup() {
     toast.warning('请输入群名称', '为你的群组起个名字')
     return
   }
+  if (groupName.value.length > 20) {
+    toast.error('创建群组失败', '群名称长度不能超过20字符')
+    return
+  }
   if (pickedMemberIds.value.length === 0) {
     toast.warning('请选择成员', '请至少选择一名好友加入群组')
     return
   }
-  await groupApi.createGroup({
-    name: groupName.value,
-    avatar: newGroupAvatar.value || undefined,
-    memberIds: pickedMemberIds.value
-  })
-  toast.success('创建成功', `群组「${groupName.value}」已创建`)
-  groupModalVisible.value = false
-  chatStore.fetchConversations()
+  try {
+    await groupApi.createGroup({
+      name: groupName.value,
+      avatar: newGroupAvatar.value || undefined,
+      memberIds: pickedMemberIds.value
+    })
+    toast.success('创建成功', `群组「${groupName.value}」已创建`)
+    groupModalVisible.value = false
+    chatStore.fetchConversations()
+  } catch (err) {
+    const errorMsg = (err as Error).message || '创建群组失败'
+    toast.error('创建群组失败', errorMsg.includes('长度不能超过20') ? '群名称长度不能超过20字符' : errorMsg)
+  }
 }
 
 // === 群头像上传 ===
@@ -701,6 +710,11 @@ async function handleGroupAvatarChange(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  if (!file.type.startsWith('image/')) {
+    toast.warning('请上传图片文件', '支持 JPG / PNG / GIF 等图片格式')
+    input.value = ''
+    return
+  }
   if (file.size > 2 * 1024 * 1024) {
     toast.warning('头像过大', '请选择 2MB 以内的图片')
     input.value = ''
@@ -721,6 +735,11 @@ async function handleDetailAvatarChange(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file || !currentConversation.value) return
+  if (!file.type.startsWith('image/')) {
+    toast.warning('请上传图片文件', '支持 JPG / PNG / GIF 等图片格式')
+    input.value = ''
+    return
+  }
   if (file.size > 2 * 1024 * 1024) {
     toast.warning('头像过大', '请选择 2MB 以内的图片')
     input.value = ''
@@ -737,7 +756,8 @@ async function handleDetailAvatarChange(e: Event) {
     toast.success('头像更新成功')
   } catch (err) {
     console.error('[ChatView.handleDetailAvatarChange] 上传群头像失败:', err)
-    toast.error('上传失败', '请稍后重试')
+    const errorMsg = (err as Error).message || '请稍后重试'
+    toast.error('上传失败', errorMsg.includes('请勿重复操作') ? '请勿重复操作，稍后再重试' : errorMsg)
   } finally {
     avatarUploading.value = false
     input.value = ''
@@ -763,6 +783,10 @@ async function saveGroupName() {
   editingGroupName.value = false
   const newName = tempGroupName.value.trim()
   if (!newName || newName === currentConversation.value.name) return
+  if (newName.length > 20) {
+    toast.error('修改群名称失败', '群名称长度不能超过20字符')
+    return
+  }
   try {
     await groupApi.updateGroup(currentConversation.value.id, { name: newName })
     currentConversation.value.name = newName
@@ -770,7 +794,8 @@ async function saveGroupName() {
     toast.success('群名称已更新')
   } catch (err) {
     console.error('[ChatView.saveGroupName] 修改群名失败:', err)
-    toast.error('修改失败', '请稍后重试')
+    const errorMsg = (err as Error).message || '请稍后重试'
+    toast.error('修改失败', errorMsg.includes('请勿重复操作') ? '请勿重复操作，稍后再重试' : errorMsg)
   }
 }
 
@@ -1196,7 +1221,7 @@ const themeIconName = computed(() => {
                 ref="groupNameEditRef"
                 v-model="tempGroupName"
                 class="input group-name-input"
-                maxlength="30"
+                maxlength="20"
                 @keyup.enter="saveGroupName"
                 @keyup.escape="cancelEditGroupName"
                 @blur="saveGroupName"
@@ -1526,7 +1551,7 @@ const themeIconName = computed(() => {
           </div>
           <div class="form-group">
             <label class="form-label">群名称</label>
-            <input v-model="groupName" class="input" placeholder="为你的群组起个名字" />
+            <input v-model="groupName" class="input" maxlength="20" placeholder="为你的群组起个名字" />
           </div>
           <div class="form-group">
             <label class="form-label">选择成员（已选 {{ pickedMemberIds.length }} 人）</label>

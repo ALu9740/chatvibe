@@ -98,12 +98,12 @@ export function createGroup(data: CreateGroupRequest) {
     avatar: data.avatar,
     memberIds: data.memberIds.map((id) => Number(id)).filter((n) => !isNaN(n))
   }
-  return request.post<unknown, RawConversation>('/group', payload).then(mapGroup)
+  return request.post<unknown, RawConversation>('/group', payload, { _skipToast: true } as Record<string, unknown>).then(mapGroup)
 }
 
 /** 上传群头像（base64 → MinIO，返回 URL） */
 export function uploadGroupAvatar(groupId: string | number, base64: string) {
-  return request.post<unknown, string>(`/group/${groupId}/avatar`, { base64 })
+  return request.post<unknown, string>(`/group/${groupId}/avatar`, { base64 }, { _skipToast: true } as Record<string, unknown>)
 }
 
 /** 编辑群信息（name 和 avatar 均可选，avatar 传已上传的 URL） */
@@ -111,7 +111,7 @@ export function updateGroup(groupId: string | number, data: { name?: string; ava
   const params: string[] = []
   if (data.name != null) params.push(`name=${encodeURIComponent(data.name)}`)
   if (data.avatar != null) params.push(`avatar=${encodeURIComponent(data.avatar)}`)
-  return request.put<unknown, RawConversation>(`/group/${groupId}?${params.join('&')}`).then(mapGroup)
+  return request.put<unknown, RawConversation>(`/group/${groupId}?${params.join('&')}`, undefined, { _skipToast: true } as Record<string, unknown>).then(mapGroup)
 }
 
 /** 退出群组 */
