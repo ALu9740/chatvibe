@@ -99,6 +99,11 @@ function isAdminPage(): boolean {
   return window.location.pathname.startsWith('/admin')
 }
 
+/** 判断请求是否为认证接口（登录/注册等公开接口，无需携带 token） */
+function isAuthEndpoint(url: string | undefined): boolean {
+  return !!url && url.startsWith('/auth/')
+}
+
 // ============================================================
 // Token 自动刷新机制
 // ============================================================
@@ -217,6 +222,10 @@ async function handleTokenExpired(
 service.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const url = config.url
+    // 认证接口（登录/注册等）不携带任何 token，避免过期 token 干扰
+    if (isAuthEndpoint(url)) {
+      return config
+    }
     if (isAdminRequest(url)) {
       // 管理员接口使用管理员 token
       const adminToken = getAdminToken()
@@ -253,6 +262,10 @@ service.interceptors.response.use(
 
     // 1002 未授权：尝试刷新 token 并重试请求
     if (res.code === 1002) {
+      // 认证接口不刷新 token，直接拒绝（由调用方处理错误提示）
+      if (isAuthEndpoint(response.config.url)) {
+        return Promise.reject(new Error(res.message || '请求失败'))
+      }
       return handleTokenExpired(response.config, isAdmin)
     }
 
@@ -307,7 +320,8 @@ service.interceptors.response.use(
     const isAdmin = isAdminRequest(error.config?.url) || isAdminPage()
 
     if (status === 401) {
-      if (error.config) {
+      // 认证接口不刷新 token，直接拒绝
+      if (error.config && !isAuthEndpoint(error.config?.url)) {
         return handleTokenExpired(error.config, isAdmin)
       }
       redirectToLogin(isAdmin)

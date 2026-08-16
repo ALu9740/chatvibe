@@ -25,7 +25,7 @@ export const useAdminAuthStore = defineStore('adminAuth', () => {
     // 校验是否为管理角色 (SUPER_ADMIN / ADMIN / OPERATOR)
     const adminRoles = ['SUPER_ADMIN', 'ADMIN', 'OPERATOR']
     if (!result.user.role || !adminRoles.includes(result.user.role)) {
-      throw new Error('该账号无管理员权限')
+      throw new Error('非管理员账号')
     }
     token.value = result.accessToken
     refreshToken.value = result.refreshToken || ''
