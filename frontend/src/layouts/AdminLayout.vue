@@ -17,16 +17,16 @@ const adminAuthStore = useAdminAuthStore()
 
 const sidebarCollapsed = ref(false)
 
-/** 侧边栏菜单项 */
+/** 侧边栏菜单项（roles 控制各角色可见性） */
 const menuItems = [
-  { index: '/admin', title: '数据概览', icon: 'DataAnalysis' },
-  { index: '/admin/users', title: '用户管理', icon: 'User' },
-  { index: '/admin/messages', title: '消息审计', icon: 'ChatDotRound' },
-  { index: '/admin/groups', title: '群组管理', icon: 'UserFilled' },
-  { index: '/admin/ai', title: 'AI 服务', icon: 'MagicStick' },
-  { index: '/admin/notifications', title: '通知公告', icon: 'Bell' },
-  { index: '/admin/config', title: '系统配置', icon: 'Setting' },
-  { index: '/admin/logs', title: '操作日志', icon: 'Document' }
+  { index: '/admin', title: '数据概览', icon: 'DataAnalysis', roles: ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'] as AdminRole[] },
+  { index: '/admin/users', title: '用户管理', icon: 'User', roles: ['SUPER_ADMIN', 'ADMIN'] as AdminRole[] },
+  { index: '/admin/messages', title: '消息审计', icon: 'ChatDotRound', roles: ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'] as AdminRole[] },
+  { index: '/admin/groups', title: '群组管理', icon: 'UserFilled', roles: ['SUPER_ADMIN', 'ADMIN'] as AdminRole[] },
+  { index: '/admin/ai', title: 'AI 服务', icon: 'MagicStick', roles: ['SUPER_ADMIN', 'ADMIN'] as AdminRole[] },
+  { index: '/admin/notifications', title: '通知公告', icon: 'Bell', roles: ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'] as AdminRole[] },
+  { index: '/admin/config', title: '系统配置', icon: 'Setting', roles: ['SUPER_ADMIN'] as AdminRole[] },
+  { index: '/admin/logs', title: '操作日志', icon: 'Document', roles: ['SUPER_ADMIN'] as AdminRole[] }
 ]
 
 /** 当前激活菜单 */
@@ -34,6 +34,12 @@ const activeMenu = computed(() => route.path)
 
 /** 管理员信息（从 store 获取） */
 const admin = computed(() => adminAuthStore.admin)
+
+/** 按角色过滤后的可见菜单项 */
+const visibleMenuItems = computed(() => {
+  const role = admin.value?.role || 'OPERATOR'
+  return menuItems.filter((item) => item.roles.includes(role))
+})
 
 /** 角色显示文案 */
 const roleText = computed(() => {
@@ -77,6 +83,8 @@ function handleCommand(cmd: string) {
 }
 
 onMounted(async () => {
+  // 路由守卫可能已拉取过管理员信息，避免重复请求
+  if (adminAuthStore.admin) return
   try {
     await adminAuthStore.fetchAdmin()
   } catch {
@@ -109,7 +117,7 @@ onMounted(async () => {
         @select="handleMenuSelect"
       >
         <el-menu-item
-          v-for="item in menuItems"
+          v-for="item in visibleMenuItems"
           :key="item.index"
           :index="item.index"
         >

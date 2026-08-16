@@ -1,6 +1,27 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useAdminAuthStore } from '@/stores/adminAuth'
 import { getAdminToken } from '@/utils/request'
+import type { AdminRole } from '@/types/admin'
+
+// 路由 meta 类型声明
+declare module 'vue-router' {
+  interface RouteMeta {
+    title?: string
+    requiresAuth?: boolean
+    requiresAdmin?: boolean
+    adminPage?: boolean
+    /** 允许访问的管理员角色列表，未设置则所有管理员可访问 */
+    roles?: AdminRole[]
+  }
+}
+
+// 各角色允许访问的路由路径（用于无权限时重定向到第一个可用页）
+const ROLE_HOME: Record<AdminRole, string> = {
+  SUPER_ADMIN: '/admin',
+  ADMIN: '/admin',
+  OPERATOR: '/admin'
+}
 
 const routes: RouteRecordRaw[] = [
   {
@@ -50,49 +71,49 @@ const routes: RouteRecordRaw[] = [
         path: '',
         name: 'admin-dashboard',
         component: () => import('@/views/admin/DashboardView.vue'),
-        meta: { title: '数据概览', requiresAuth: false, requiresAdmin: true }
+        meta: { title: '数据概览', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'] }
       },
       {
         path: 'users',
         name: 'admin-users',
         component: () => import('@/views/admin/UserManageView.vue'),
-        meta: { title: '用户管理', requiresAuth: false, requiresAdmin: true }
+        meta: { title: '用户管理', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN', 'ADMIN'] }
       },
       {
         path: 'messages',
         name: 'admin-messages',
         component: () => import('@/views/admin/MessageAuditView.vue'),
-        meta: { title: '消息审计', requiresAuth: false, requiresAdmin: true }
+        meta: { title: '消息审计', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'] }
       },
       {
         path: 'groups',
         name: 'admin-groups',
         component: () => import('@/views/admin/GroupManageView.vue'),
-        meta: { title: '群组管理', requiresAuth: false, requiresAdmin: true }
+        meta: { title: '群组管理', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN', 'ADMIN'] }
       },
       {
         path: 'ai',
         name: 'admin-ai',
         component: () => import('@/views/admin/AiServiceView.vue'),
-        meta: { title: 'AI 服务', requiresAuth: false, requiresAdmin: true }
+        meta: { title: 'AI 服务', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN', 'ADMIN'] }
       },
       {
         path: 'notifications',
         name: 'admin-notifications',
         component: () => import('@/views/admin/NotificationView.vue'),
-        meta: { title: '通知公告', requiresAuth: false, requiresAdmin: true }
+        meta: { title: '通知公告', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN', 'ADMIN', 'OPERATOR'] }
       },
       {
         path: 'config',
         name: 'admin-config',
         component: () => import('@/views/admin/SystemConfigView.vue'),
-        meta: { title: '系统配置', requiresAuth: false, requiresAdmin: true }
+        meta: { title: '系统配置', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN'] }
       },
       {
         path: 'logs',
         name: 'admin-logs',
         component: () => import('@/views/admin/OperationLogView.vue'),
-        meta: { title: '操作日志', requiresAuth: false, requiresAdmin: true }
+        meta: { title: '操作日志', requiresAuth: false, requiresAdmin: true, roles: ['SUPER_ADMIN'] }
       }
     ]
   },
@@ -135,8 +156,23 @@ router.beforeEach(async (to, _from, next) => {
       next({ name: 'admin-login', query: { redirect: to.fullPath } })
       return
     }
-    // 已有管理员 token，允许进入
-    // 用户信息由 AdminLayout onMounted 拉取
+    // 拉取管理员信息（如尚未加载）
+    const adminAuthStore = useAdminAuthStore()
+    if (!adminAuthStore.admin) {
+      try {
+        await adminAuthStore.fetchAdmin()
+      } catch {
+        adminAuthStore.logoutLocal()
+        next({ name: 'admin-login', query: { redirect: to.fullPath } })
+        return
+      }
+    }
+    // 角色权限校验：路由 meta.roles 未设置则不限制
+    const role = adminAuthStore.admin?.role
+    if (role && to.meta.roles && !to.meta.roles.includes(role)) {
+      next(ROLE_HOME[role])
+      return
+    }
     next()
     return
   }
