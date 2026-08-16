@@ -201,11 +201,12 @@ onMounted(() => {
     <el-card shadow="never" class="table-card">
       <el-table :data="tableData" v-loading="loading" stripe style="width: 100%">
         <el-table-column label="消息ID" prop="id" width="90" />
-        <el-table-column label="会话" min-width="150">
+        <el-table-column label="会话" min-width="180">
           <template #default="{ row }">
             <div class="conv-cell">
               <span class="conv-name">{{ row.conversationName }}</span>
               <el-tag size="small" type="info">{{ row.conversationType }}</el-tag>
+              <span class="sender-id">(ID: {{ row.conversationId }})</span>
             </div>
           </template>
         </el-table-column>
