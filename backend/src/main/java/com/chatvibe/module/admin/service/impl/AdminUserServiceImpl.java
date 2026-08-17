@@ -92,7 +92,7 @@ public class AdminUserServiceImpl implements AdminUserService {
         vo.setBio(user.getBio());
         vo.setRole(user.getRole());
         vo.setStatus(user.getBanned() != null && user.getBanned() == 1 ? "banned" : "normal");
-        vo.setOnline(user.getStatus() != null && user.getStatus() == 1);
+        vo.setOnlineStatus(user.getStatus() != null ? user.getStatus() : 0);
         if (user.getCreatedAt() != null) {
             vo.setCreatedAt(user.getCreatedAt().format(DATE_TIME_FORMATTER));
         }

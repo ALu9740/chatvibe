@@ -113,7 +113,8 @@ export interface SystemUser {
   role: UserRole
   createdAt: string
   lastActiveAt?: string
-  online?: boolean
+  /** 在线状态: 0-离线 1-在线 2-忙碌 3-离开 */
+  onlineStatus: number
   bio?: string
 }
 

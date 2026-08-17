@@ -42,9 +42,9 @@ public class SystemUserVO {
     private String lastActiveAt;
 
     /**
-     * 是否在线
+     * 在线状态: 0-离线 1-在线 2-忙碌 3-离开
      */
-    private Boolean online;
+    private Integer onlineStatus;
 
     private String bio;
 }

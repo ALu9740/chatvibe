@@ -57,6 +57,14 @@ const roleTagType: Record<UserRole, any> = {
   SUPER_ADMIN: 'danger'
 }
 
+/** 在线状态映射: 0-离线 1-在线 2-忙碌 3-离开 */
+const onlineStatusMap: Record<number, { text: string; dotClass: string }> = {
+  0: { text: '离线', dotClass: 'dot-offline' },
+  1: { text: '在线', dotClass: 'dot-online' },
+  2: { text: '忙碌', dotClass: 'dot-busy' },
+  3: { text: '离开', dotClass: 'dot-away' }
+}
+
 /** 角色变更下拉可选角色（按当前管理员角色过滤） */
 const availableRoles = computed(() => {
   if (currentRole.value === 'SUPER_ADMIN') {
@@ -281,8 +289,8 @@ onMounted(() => {
         <el-table-column label="在线" width="80">
           <template #default="{ row }">
             <span class="online-status">
-              <span class="online-text">{{ row.online ? '在线' : '离线' }}</span>
-              <i class="online-dot" :class="row.online ? 'dot-online' : 'dot-offline'"></i>
+              <span class="online-text">{{ onlineStatusMap[row.onlineStatus]?.text || '离线' }}</span>
+              <i class="online-dot" :class="onlineStatusMap[row.onlineStatus]?.dotClass || 'dot-offline'"></i>
             </span>
           </template>
         </el-table-column>
@@ -450,6 +458,16 @@ onMounted(() => {
 
   &.dot-offline {
     background: #94A3B8;
+  }
+
+  &.dot-busy {
+    background: #EF4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+  }
+
+  &.dot-away {
+    background: #F59E0B;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
   }
 }
 
