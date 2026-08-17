@@ -35,9 +35,9 @@ function preview(conv: Conversation): string {
   return conv.lastMessage
 }
 
-// 私聊会话根据对方状态返回状态点样式类
+// 私聊会话根据对方状态返回状态点样式类（AI 助手会话不显示状态点）
 function statusDotClass(conv: Conversation): string | null {
-  if (conv.type !== 'private' || conv.peerStatus === undefined) return null
+  if (conv.isAI || conv.type !== 'private' || conv.peerStatus === undefined) return null
   switch (conv.peerStatus) {
     case 1: return 'online'
     case 2: return 'busy'

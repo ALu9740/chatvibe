@@ -1125,7 +1125,7 @@ const themeIconName = computed(() => {
                 <template v-if="isGroup">
                   {{ currentConversation.members || 0 }} 位成员 · {{ onlineMemberCount }} 人在线
                 </template>
-                <template v-else>{{ peerStatusLabel }}</template>
+                <template v-else-if="!currentConversation.isAI">{{ peerStatusLabel }}</template>
               </div>
             </div>
             <div class="topbar-actions">
