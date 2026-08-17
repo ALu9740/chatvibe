@@ -2,6 +2,9 @@ import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axio
 import { toast } from '@/utils/toast'
 import type { ApiResponse, LoginResult } from '@/types'
 
+/** 扩展 axios 请求配置，支持自定义 _skipToast 字段 */
+type RequestConfig = InternalAxiosRequestConfig & { _skipToast?: boolean }
+
 // C 端用户 token
 const TOKEN_KEY = 'chatvibe_token'
 const REFRESH_TOKEN_KEY = 'chatvibe_refresh_token'
@@ -297,7 +300,7 @@ service.interceptors.response.use(
         removeToken()
         removeRefreshToken()
       }
-      if (!(response.config as Record<string, unknown>)?._skipToast) {
+      if (!(response.config as RequestConfig)?._skipToast) {
         toast.error('账号已被封禁', res.message || '账号已被封禁，请联系管理员')
       }
       const target = isAdmin ? '/admin/login' : '/login'
@@ -310,7 +313,7 @@ service.interceptors.response.use(
     }
 
     // 其他业务错误（支持 _skipToast 跳过拦截器 toast，由调用方自行处理）
-    if (!(response.config as Record<string, unknown>)?._skipToast) {
+    if (!(response.config as RequestConfig)?._skipToast) {
       toast.error('请求失败', res.message || '请稍后重试')
     }
     return Promise.reject(new Error(res.message || '请求失败'))
