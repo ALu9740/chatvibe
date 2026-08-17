@@ -286,13 +286,3 @@ CREATE TABLE `system_config` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_config_key` (`config_key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='系统配置表';
-
--- ============================================================
--- 增量迁移（已有数据库执行）
--- ============================================================
-
--- message 表新增 provider 列：记录 AI 回复消息的供应商（消息级别）
--- 解决会话切换供应商后，历史 AI 消息被错误归属到最新供应商的问题
-ALTER TABLE `message`
-    ADD COLUMN `provider` VARCHAR(50) DEFAULT NULL COMMENT 'AI供应商(仅AI回复消息有值，记录生成该消息的供应商)'
-    AFTER `status`;
