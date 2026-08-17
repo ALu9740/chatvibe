@@ -504,10 +504,13 @@ export const useChatStore = defineStore('chat', () => {
     if (exists) {
       if (message.sender === 'ai' && aiPlaceholderIdx !== -1) {
         // 用后端真实消息替换占位消息（保留流式输出的 content，避免用户看到内容突变）
-        // 只同步后端真实 ID 与落库时间
+        // 只同步后端真实 ID 与落库时间，并关闭流式标记
+        // （WebSocket 广播到达时该段 AI 已落库，streaming 必须关闭，
+        //   否则 SSE 的 finalizeSegment 会因 ID 已被替换而找不到消息，导致光标常驻）
         const placeholder = list[aiPlaceholderIdx]
         placeholder.id = message.id
         placeholder.time = message.time
+        placeholder.streaming = false
       } else if (message.sender === 'self') {
         // WebSocket 广播回环：用后端真实消息（含 DB ID）替换临时消息，标记为已送达
         const tempIdx = list.findIndex(

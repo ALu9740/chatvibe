@@ -45,13 +45,12 @@ export function useAiStream() {
       await streamFromServer(conversationId, question, aiMsgId)
     } finally {
       streaming.value = false
-      // 确保最后一个 AI 消息的流式标记关闭
+      // 确保所有 AI 消息的流式标记关闭（兜底，防止竞态导致遗漏）
       const list = chatStore.messageMap[conversationId]
       if (list) {
         for (let i = list.length - 1; i >= 0; i--) {
           if (list[i].sender === 'ai' && list[i].streaming) {
             list[i].streaming = false
-            break
           }
         }
       }
