@@ -102,9 +102,10 @@ function isAdminPage(): boolean {
   return window.location.pathname.startsWith('/admin')
 }
 
-/** 判断请求是否为认证接口（登录/注册等公开接口，无需携带 token） */
+/** 判断请求是否为认证接口（登录/注册等公开接口，无需携带 token）
+ *  注意：/auth/logout 需要携带 token 以便后端识别用户，不在此列 */
 function isAuthEndpoint(url: string | undefined): boolean {
-  return !!url && url.startsWith('/auth/')
+  return !!url && url.startsWith('/auth/') && !url.startsWith('/auth/logout')
 }
 
 // ============================================================

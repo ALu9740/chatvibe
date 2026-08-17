@@ -37,8 +37,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   /** 退出登录（调用后端 + 本地清理） */
   async function logout(): Promise<void> {
-    await authApi.logout()
-    logoutLocal()
+    try {
+      await authApi.logout()
+    } catch {
+      // 后端登出失败（如 token 已过期）不阻塞前端清理
+    } finally {
+      logoutLocal()
+    }
   }
 
   /** 仅本地清理（token 失效时调用） */
