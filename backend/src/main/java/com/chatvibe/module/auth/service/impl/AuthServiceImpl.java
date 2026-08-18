@@ -14,7 +14,6 @@ import com.chatvibe.module.auth.dto.SendCodeDTO;
 import com.chatvibe.module.auth.event.*;
 import com.chatvibe.module.auth.service.AuthService;
 import com.chatvibe.module.auth.vo.LoginVO;
-import com.chatvibe.module.chat.service.ChatService;
 import com.chatvibe.module.user.entity.User;
 import com.chatvibe.module.user.enums.UserRoleEnum;
 import com.chatvibe.module.user.enums.UserStatusEnum;
@@ -63,7 +62,6 @@ public class AuthServiceImpl implements AuthService {
 
     private final UserMapper userMapper;
     private final UserService userService;
-    private final ChatService chatService;
     private final JwtUtil jwtUtil;
     private final PasswordEncoder passwordEncoder;
     private final StringRedisTemplate stringRedisTemplate;
