@@ -455,16 +455,16 @@ onUnmounted(() => {
   gap: 6px;
   padding: 6px 14px;
   border-radius: $r-full;
-  background: rgba(124, 58, 237, 0.08);
-  border: 1px solid rgba(124, 58, 237, 0.15);
-  color: $c-ai;
+  background: var(--ai-fill);
+  border: 1px solid var(--ai-border-soft);
+  color: var(--c-ai);
   font-size: 13px;
   font-weight: 600;
   font-family: $font-body;
   width: fit-content;
 
   &__star {
-    color: $c-ai-light;
+    color: var(--c-ai-light);
     animation: starBlink 2s ease-in-out infinite;
   }
 }
@@ -547,8 +547,8 @@ onUnmounted(() => {
       }
 
       &--ai {
-        background: rgba(124, 58, 237, 0.1);
-        color: $c-ai;
+        background: var(--ai-fill);
+        color: var(--c-ai);
       }
 
       &--green {
@@ -610,7 +610,7 @@ onUnmounted(() => {
   &--ai {
     width: 300px;
     height: 300px;
-    background: rgba(124, 58, 237, 0.18);
+    background: var(--ai-glow-strong);
     top: -40px;
     right: -40px;
   }
@@ -691,8 +691,8 @@ onUnmounted(() => {
     height: 18px;
     padding: 0 5px;
     border-radius: $r-full;
-    background: rgba(124, 58, 237, 0.1);
-    color: $c-ai;
+    background: var(--ai-fill);
+    color: var(--c-ai);
     font-size: 11px;
     font-weight: 700;
   }
@@ -746,10 +746,10 @@ onUnmounted(() => {
 
     // 扫描中：输入区微调背景
     &.is-scanning {
-      background: rgba(124, 58, 237, 0.02);
+      background: var(--ai-fill-soft);
 
       .input-bar {
-        border-color: rgba(124, 58, 237, 0.3);
+        border-color: var(--ai-border);
       }
     }
   }
@@ -764,13 +764,13 @@ onUnmounted(() => {
     background: linear-gradient(
       90deg,
       transparent,
-      $c-ai-light,
-      $c-ai,
-      $c-ai-light,
+      var(--c-ai-light),
+      var(--c-ai),
+      var(--c-ai-light),
       transparent
     );
     animation: scanLine 1.2s $ease-smooth infinite;
-    box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+    box-shadow: 0 0 12px var(--ai-scan-glow);
     z-index: 1;
   }
 
@@ -800,10 +800,10 @@ onUnmounted(() => {
     &__hint {
       font-size: 14px;
       font-weight: 700;
-      color: $c-ai;
+      color: var(--c-ai);
       padding: 2px 8px;
       border-radius: $r-sm;
-      background: rgba(124, 58, 237, 0.08);
+      background: var(--ai-fill);
     }
   }
 
@@ -846,9 +846,9 @@ onUnmounted(() => {
 :deep(.chat-msg.is-ai .chat-msg__bubble) {
   border: 1.5px solid transparent;
   background:
-    linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(167, 139, 250, 0.04))
+    linear-gradient(135deg, var(--ai-bubble-bg), var(--ai-bubble-bg-2))
       padding-box,
-    $grad-ai border-box;
+    var(--grad-ai) border-box;
 }
 
 // ============================================================
@@ -987,8 +987,8 @@ onUnmounted(() => {
   }
 
   .version-badge {
-    background: rgba(124, 58, 237, 0.12);
-    border-color: rgba(124, 58, 237, 0.2);
+    background: var(--ai-fill-strong);
+    border-color: var(--ai-border);
   }
 }
 </style>

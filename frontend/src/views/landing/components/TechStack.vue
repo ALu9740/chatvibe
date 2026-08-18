@@ -19,7 +19,7 @@ const techs: TechItem[] = [
   { abbr: 'MP', name: 'MyBatis-Plus', desc: '增强 ORM，CRUD 自动生成，分页', color: '#BA372A' },
   { abbr: 'SQL', name: 'MySQL 8.0', desc: '主数据库，结构化持久存储', color: '#4479A1' },
   { abbr: 'RDS', name: 'Redis 8.0', desc: '缓存与会话存储，在线状态/限流', color: '#DC382D' },
-  { abbr: 'AI', name: 'Ollama AI', desc: '本地 AI 推理，流式回复生成', color: '#7C3AED' }
+  { abbr: 'AI', name: 'Ollama AI', desc: '本地 AI 推理，流式回复生成', color: '#5A5A7A' }
 ]
 </script>
 

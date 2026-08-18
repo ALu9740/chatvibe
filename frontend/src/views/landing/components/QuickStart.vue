@@ -128,7 +128,7 @@ const steps: Step[] = [
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(90deg, $c-primary, $c-ai);
+  background: linear-gradient(90deg, $c-primary, var(--c-ai));
   opacity: 0.3;
   border-radius: $r-full;
 }
@@ -139,10 +139,10 @@ const steps: Step[] = [
   width: 8px;
   height: 8px;
   border-radius: $r-full;
-  background: $grad-ai;
+  background: var(--grad-ai);
   transform: translateY(-50%);
   animation: flowParticle 3s linear infinite;
-  box-shadow: 0 0 8px rgba(124, 58, 237, 0.4);
+  box-shadow: 0 0 8px var(--ai-scan-glow);
 }
 
 /* CTA */
@@ -178,7 +178,7 @@ const steps: Step[] = [
       height: 40px;
 
       .connector-line {
-        background: linear-gradient(180deg, $c-primary, $c-ai);
+        background: linear-gradient(180deg, $c-primary, var(--c-ai));
       }
 
       .connector-particle {

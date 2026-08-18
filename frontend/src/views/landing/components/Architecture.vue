@@ -39,7 +39,7 @@ const logLines: LogLine[] = [
 const archLayers: ArchLayerItem[] = [
   { no: '01', name: '前端展示层', tech: 'Vue 3 SPA' },
   { no: '02', name: '网关安全层', tech: 'Spring Security + JWT' },
-  { no: '03', name: '业务服务层', tech: 'Controller / Service / Mapper' },
+  { no: '03', name: '业务服务层', tech: 'Controller/Service/Mapper' },
   { no: '04', name: '数据基础设施', tech: 'MySQL / Redis / AI' }
 ]
 
@@ -138,6 +138,7 @@ onUnmounted(() => {
         v-for="(layer, idx) in archLayers"
         :key="layer.no"
         class="arch-layer-mini"
+        :style="{ zIndex: archLayers.length - idx }"
       >
         <div class="arch-layer-mini-inner">
           <span class="arch-layer-mini-no">{{ layer.no }}</span>
@@ -182,7 +183,7 @@ onUnmounted(() => {
   min-width: 0;
   background: var(--term-bg);
   border-radius: $r-lg;
-  box-shadow: $shadow-lg, 0 0 0 1px rgba(124, 58, 237, 0.18),
+  box-shadow: $shadow-lg, 0 0 0 1px var(--ai-glow-strong),
               var(--term-shadow);
   overflow: hidden;
   position: relative;
@@ -193,7 +194,7 @@ onUnmounted(() => {
     position: absolute;
     inset: -2px;
     border-radius: $r-lg;
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.25), rgba(37, 99, 235, 0.18));
+    background: linear-gradient(135deg, var(--ai-glow-strong), rgba(37, 99, 235, 0.18));
     z-index: -1;
     filter: blur(18px);
     opacity: var(--term-glow-opacity);
@@ -275,14 +276,14 @@ onUnmounted(() => {
   font-weight: 600;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: $c-ai;
+  color: var(--c-ai);
 
   .pulse-dot {
     width: 8px;
     height: 8px;
     border-radius: $r-full;
-    background: $c-ai-light;
-    box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.55);
+    background: var(--c-ai-light);
+    box-shadow: 0 0 0 0 var(--ai-scan-glow);
     animation: pulse 1.8s $ease-smooth infinite;
   }
 }
@@ -306,9 +307,9 @@ onUnmounted(() => {
 .inline-code {
   font-family: $font-mono;
   font-size: 13px;
-  color: $c-ai-light;
-  background: rgba(124, 58, 237, 0.1);
-  border: 1px solid rgba(124, 58, 237, 0.2);
+  color: var(--c-ai-light);
+  background: var(--ai-fill);
+  border: 1px solid var(--ai-border);
   border-radius: $r-sm;
   padding: 1px 6px;
 }
@@ -336,7 +337,7 @@ onUnmounted(() => {
       width: 12px;
       height: 12px;
       border-radius: $r-sm;
-      background: $grad-ai;
+      background: var(--grad-ai);
     }
   }
 }
@@ -349,7 +350,7 @@ onUnmounted(() => {
   margin: 56px auto 0;
   display: flex;
   align-items: stretch;
-  gap: 0;
+  gap: 48px;
   flex-wrap: nowrap;
 }
 
@@ -358,6 +359,7 @@ onUnmounted(() => {
   align-items: center;
   flex: 1 1 0;
   min-width: 0;
+  position: relative;
 
   .arch-layer-mini-inner {
     flex: 1;
@@ -375,17 +377,26 @@ onUnmounted(() => {
   &:hover .arch-layer-mini-inner {
     opacity: 1;
     transform: translateY(-2px);
-    border-color: rgba(124, 58, 237, 0.4);
+    border-color: var(--ai-border);
     box-shadow: $shadow-md;
   }
 
   .arch-layer-mini-arrow {
-    flex: 0 0 auto;
-    color: var(--landing-text-muted);
-    opacity: 0.5;
-    padding: 0 8px;
+    position: absolute;
+    right: -40px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--landing-bg);
+    border: 1.5px solid var(--ai-border);
+    color: var(--c-ai);
     display: flex;
     align-items: center;
+    justify-content: center;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -395,7 +406,7 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 700;
   color: #fff;
-  background: $grad-ai;
+  background: var(--grad-ai);
   border-radius: $r-sm;
   padding: 4px 8px;
   letter-spacing: 0.5px;
@@ -438,6 +449,12 @@ onUnmounted(() => {
   .arch-layer-mini .arch-layer-mini-inner {
     padding: 12px 12px;
     gap: 10px;
+  }
+  .arch-layers {
+    gap: 40px;
+  }
+  .arch-layer-mini-arrow {
+    right: -34px;
   }
 }
 

@@ -145,7 +145,7 @@ onUnmounted(() => observer?.disconnect())
 
   &.icon-blue { background: #2563EB; }
   &.icon-green { background: #059669; }
-  &.icon-ai { background: #7C3AED; }
+  &.icon-ai { background: var(--grad-ai); }
   &.icon-amber { background: #D97706; }
   &.icon-violet { background: #6366F1; }
   &.icon-cyan { background: #0891B2; }

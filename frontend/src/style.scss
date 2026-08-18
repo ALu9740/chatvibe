@@ -47,6 +47,7 @@
   --shadow-lg: #{$shadow-lg};
   --shadow-blue: #{$shadow-blue};
   --shadow-ai: #{$shadow-ai};
+  --shadow-glow-ai: 0 0 12px var(--ai-glow-strong);
 
   /* 水墨风墨球色彩 */
   --ink-ball-start: #4A4A6A;
@@ -63,6 +64,17 @@
   --ink-bubble-border: rgba(26, 26, 46, 0.12);
   --ink-bubble-overlay: linear-gradient(135deg, rgba(44, 44, 68, 0.03), rgba(74, 74, 106, 0.015));
   --ink-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+
+  /* AI Landing 主题色 — 水墨风（替换原紫罗兰硬编码） */
+  --ai-glow: rgba(44, 44, 68, 0.06);
+  --ai-fill-soft: rgba(44, 44, 68, 0.04);
+  --ai-fill: rgba(44, 44, 68, 0.08);
+  --ai-fill-strong: rgba(44, 44, 68, 0.12);
+  --ai-border-soft: rgba(44, 44, 68, 0.14);
+  --ai-border: rgba(44, 44, 68, 0.20);
+  --ai-glow-strong: rgba(44, 44, 68, 0.18);
+  --ai-scan-mid: rgba(90, 90, 122, 0.30);
+  --ai-scan-glow: rgba(90, 90, 122, 0.50);
 
   --r-sm: #{$r-sm};
   --r-md: #{$r-md};
@@ -127,6 +139,20 @@
   --ink-bubble-border: rgba(200, 200, 220, 0.12);
   --ink-bubble-overlay: linear-gradient(135deg, rgba(200, 200, 220, 0.04), rgba(160, 160, 200, 0.02));
   --ink-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+
+  /* AI 渐变 — 暗色 */
+  --grad-ai: linear-gradient(135deg, #C4C4D8 0%, #B0B0CC 50%, #E0E0F0 100%);
+
+  /* AI Landing 主题色 — 水墨风暗色 */
+  --ai-glow: rgba(200, 200, 220, 0.06);
+  --ai-fill-soft: rgba(200, 200, 220, 0.04);
+  --ai-fill: rgba(200, 200, 220, 0.08);
+  --ai-fill-strong: rgba(200, 200, 220, 0.12);
+  --ai-border-soft: rgba(200, 200, 220, 0.14);
+  --ai-border: rgba(200, 200, 220, 0.20);
+  --ai-glow-strong: rgba(200, 200, 220, 0.18);
+  --ai-scan-mid: rgba(255, 255, 255, 0.30);
+  --ai-scan-glow: rgba(255, 255, 255, 0.50);
 
   /* AI 头像暗色微光 */
   .avatar.ai-avatar { box-shadow: 0 0 12px var(--ink-glow); }
@@ -2583,7 +2609,7 @@ img { display: block; max-width: 100%; }
 .tech-mybatis { background: linear-gradient(135deg, #B71C1C, #8B0000); }
 .tech-mysql { background: linear-gradient(135deg, #00758F, #F29111); }
 .tech-redis { background: linear-gradient(135deg, #DC382D, #FF4438); }
-.tech-ollama { background: linear-gradient(135deg, #7C3AED, #A78BFA); }
+.tech-ollama { background: linear-gradient(135deg, #2C2C44, #5A5A7A); }
 .tech-name { font-size: 16px; font-weight: 700; margin-bottom: 8px; font-family: 'Sora', sans-serif; }
 .tech-desc { font-size: 13px; color: var(--c-text-muted); line-height: 1.6; }
 

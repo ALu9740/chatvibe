@@ -200,7 +200,7 @@ function clearInput(): void {
         <div v-if="activePreview" class="ai-preview" :key="activePreview.type">
           <!-- 气泡头部 -->
           <div class="ai-preview__head">
-            <div class="ai-preview__avatar">AI</div>
+            <div class="ai-preview__avatar"><InkBallAvatar /></div>
             <div class="ai-preview__meta">
               <div class="ai-preview__name">智能助手</div>
               <div class="ai-preview__title">{{ activePreview.title }}</div>
@@ -387,7 +387,7 @@ function clearInput(): void {
     border-color: transparent;
     background:
       linear-gradient(var(--landing-card), var(--landing-card)) padding-box,
-      $grad-ai border-box;
+      var(--grad-ai) border-box;
     box-shadow: $shadow-ai, $shadow-glow-ai;
   }
 }
@@ -402,9 +402,9 @@ function clearInput(): void {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(124, 58, 237, 0.10) 35%,
-    rgba(167, 139, 250, 0.30) 50%,
-    rgba(124, 58, 237, 0.10) 65%,
+    var(--ai-fill) 35%,
+    var(--ai-scan-mid) 50%,
+    var(--ai-fill) 65%,
     transparent 100%
   );
   pointer-events: none;
@@ -448,7 +448,7 @@ function clearInput(): void {
   transition: all $dur-normal $ease-out-expo;
 
   &.is-active {
-    background: $grad-ai;
+    background: var(--grad-ai);
     box-shadow: $shadow-ai;
   }
 
@@ -472,7 +472,7 @@ function clearInput(): void {
   font-size: 12px;
   font-weight: 600;
   color: #fff;
-  background: $grad-ai;
+  background: var(--grad-ai);
   border-radius: $r-full;
   box-shadow: $shadow-ai;
   white-space: nowrap;
@@ -521,18 +521,18 @@ function clearInput(): void {
 
   &__icon {
     flex-shrink: 0;
-    color: $c-ai-light;
+    color: var(--c-ai-light);
     transition: color $dur-normal $ease-smooth;
   }
 
   &:hover {
-    border-color: $c-ai-light;
-    color: $c-ai;
+    border-color: var(--c-ai-light);
+    color: var(--c-ai);
     transform: translateY(-2px);
     box-shadow: $shadow-sm;
 
     .ai-chip__icon {
-      color: $c-ai;
+      color: var(--c-ai);
     }
   }
 
@@ -541,12 +541,12 @@ function clearInput(): void {
     border-color: transparent;
     background:
       linear-gradient(var(--landing-card), var(--landing-card)) padding-box,
-      $grad-ai border-box;
-    color: $c-ai;
+      var(--grad-ai) border-box;
+    color: var(--c-ai);
     box-shadow: $shadow-glow-ai;
 
     .ai-chip__icon {
-      color: $c-ai;
+      color: var(--c-ai);
     }
   }
 }
@@ -560,7 +560,7 @@ function clearInput(): void {
   /* 渐变边框 + 紫罗兰光晕 */
   background:
     linear-gradient(var(--landing-card), var(--landing-card)) padding-box,
-    $grad-ai border-box;
+    var(--grad-ai) border-box;
   box-shadow: $shadow-glow-ai, $shadow-md;
   padding: 22px 24px;
   overflow: hidden;
@@ -579,16 +579,9 @@ function clearInput(): void {
   width: 38px;
   height: 38px;
   border-radius: $r-full;
-  background: $grad-ai;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: $font-display;
-  font-size: 13px;
-  font-weight: 700;
+  background: transparent;
+  overflow: hidden;
   flex-shrink: 0;
-  box-shadow: $shadow-glow-ai;
   animation: floatGlow 3s ease-in-out infinite;
 }
 
@@ -607,7 +600,7 @@ function clearInput(): void {
 .ai-preview__title {
   font-size: 12px;
   font-weight: 600;
-  color: $c-ai;
+  color: var(--c-ai);
   margin-top: 2px;
 }
 
@@ -669,8 +662,8 @@ function clearInput(): void {
     width: 26px;
     height: 26px;
     border-radius: $r-sm;
-    background: rgba(124, 58, 237, 0.10);
-    color: $c-ai;
+    background: var(--ai-fill);
+    color: var(--c-ai);
     font-family: $font-display;
     font-size: 12px;
     font-weight: 700;
@@ -704,7 +697,7 @@ function clearInput(): void {
     gap: 12px;
     padding: 11px 14px;
     border-radius: $r-md;
-    background: rgba(124, 58, 237, 0.04);
+    background: var(--ai-fill-soft);
   }
 
   &__date {
@@ -712,7 +705,7 @@ function clearInput(): void {
     font-family: $font-display;
     font-size: 12px;
     font-weight: 700;
-    color: $c-ai;
+    color: var(--c-ai);
     min-width: 36px;
   }
 
@@ -782,11 +775,11 @@ function clearInput(): void {
   }
 
   &__after {
-    background: rgba(124, 58, 237, 0.06);
-    border: 1px solid rgba(124, 58, 237, 0.14);
+    background: var(--ai-glow);
+    border: 1px solid var(--ai-border-soft);
 
     .compare__label {
-      color: $c-ai;
+      color: var(--c-ai);
     }
 
     p {
@@ -799,7 +792,7 @@ function clearInput(): void {
     display: flex;
     align-items: center;
     justify-content: center;
-    color: $c-ai-light;
+    color: var(--c-ai-light);
   }
 }
 
@@ -809,8 +802,8 @@ function clearInput(): void {
 .tech-solution {
   padding: 18px;
   border-radius: $r-lg;
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(167, 139, 250, 0.03));
-  border: 1px solid rgba(124, 58, 237, 0.12);
+  background: linear-gradient(135deg, var(--ai-glow), var(--ai-fill-soft));
+  border: 1px solid var(--ai-fill-strong);
 
   &__name {
     font-family: $font-display;
@@ -837,8 +830,8 @@ function clearInput(): void {
       font-weight: 600;
       padding: 4px 10px;
       border-radius: $r-full;
-      background: rgba(124, 58, 237, 0.10);
-      color: $c-ai;
+      background: var(--ai-fill);
+      color: var(--c-ai);
     }
   }
 }

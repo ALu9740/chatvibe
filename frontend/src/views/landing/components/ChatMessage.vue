@@ -29,7 +29,7 @@ function formatLine(text: string): string {
 <template>
   <div class="chat-msg" :class="{ 'is-ai': props.msg.isAI, 'is-self': props.align === 'right' }">
     <div class="chat-msg__avatar" :class="{ 'avatar-ai': props.msg.isAI }">
-      <span v-if="props.msg.isAI">AI</span>
+      <InkBallAvatar v-if="props.msg.isAI" />
       <span v-else>{{ props.msg.avatar }}</span>
     </div>
 
@@ -84,8 +84,8 @@ function formatLine(text: string): string {
     flex-shrink: 0;
 
     &.avatar-ai {
-      background: $grad-ai;
-      box-shadow: $shadow-glow-ai;
+      background: transparent;
+      box-shadow: var(--shadow-glow-ai);
       animation: floatGlow 3s ease-in-out infinite;
     }
   }
@@ -111,8 +111,8 @@ function formatLine(text: string): string {
     font-size: 11px;
     padding: 2px 8px;
     border-radius: $r-full;
-    background: rgba(124, 58, 237, 0.12);
-    color: $c-ai;
+    background: var(--ai-fill-strong);
+    color: var(--c-ai);
     font-weight: 600;
   }
 
@@ -131,8 +131,8 @@ function formatLine(text: string): string {
     word-break: break-word;
 
     .is-ai & {
-      background: linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(167, 139, 250, 0.04));
-      border: 1px solid rgba(124, 58, 237, 0.15);
+      background: linear-gradient(135deg, var(--ai-bubble-bg), var(--ai-bubble-bg-2));
+      border: 1px solid var(--ai-border);
       box-shadow: $shadow-glow-ai;
     }
   }
@@ -150,12 +150,18 @@ function formatLine(text: string): string {
       color: #fff;
     }
   }
+
+  /* AI 气泡：使用暗色水墨背景变量，确保高可读性 */
+  .chat-msg.is-ai .chat-msg__bubble {
+    background: linear-gradient(135deg, var(--ai-bubble-bg), var(--ai-bubble-bg-2));
+    color: #E2E8F0;
+  }
 }
 
 :deep(.mention) {
-  color: $c-ai;
+  color: var(--c-ai);
   font-weight: 600;
-  background: rgba(124, 58, 237, 0.08);
+  background: var(--ai-fill);
   padding: 1px 6px;
   border-radius: 4px;
 }
@@ -189,7 +195,7 @@ function formatLine(text: string): string {
       width: 16px;
       height: 16px;
       border-radius: 4px;
-      border: 1.5px solid rgba(124, 58, 237, 0.3);
+      border: 1.5px solid var(--ai-border);
       flex-shrink: 0;
       margin-top: 2px;
       position: relative;
@@ -201,7 +207,7 @@ function formatLine(text: string): string {
         top: 1px;
         width: 5px;
         height: 9px;
-        border: solid $c-ai;
+        border: solid var(--c-ai);
         border-width: 0 2px 2px 0;
         transform: rotate(45deg);
       }
