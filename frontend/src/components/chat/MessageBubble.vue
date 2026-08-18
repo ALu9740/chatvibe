@@ -104,14 +104,15 @@ function onRetry() {
     :class="{ self: isSelf, ai: isAI, other: !isSelf && !isAI }"
     @contextmenu="onContextmenu"
   >
-    <!-- 头像（自己消息显示在右侧，AI 始终显示紫色头像，他人显示在左侧） -->
+    <!-- 头像（自己消息显示在右侧，AI 使用墨丝流转球，他人显示在左侧） -->
     <div
       v-if="showAvatar || isAI"
       class="avatar msg-avatar"
       :class="{ 'size-md': true, 'ai-avatar': isAI }"
       :style="!isAI && !isAvatarImg && message.color ? { background: message.color } : {}"
     >
-      <img v-if="isAvatarImg" :src="resolveUploadUrl(message.avatar)" alt="头像" />
+      <InkBallAvatar v-if="isAI" />
+      <img v-else-if="isAvatarImg" :src="resolveUploadUrl(message.avatar)" alt="头像" />
       <template v-else>{{ avatarText }}</template>
     </div>
 

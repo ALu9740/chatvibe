@@ -1,6 +1,6 @@
 // ============================================================
 // ChatVibe · SCSS 设计令牌
-// 美学方向：深海蓝 + 电光蓝 + 暖白 + 紫罗兰 AI 强调
+// 美学方向：深海蓝 + 电光蓝 + 暖白 + 水墨风 AI 强调
 // ============================================================
 
 // ---------- 主色板 ----------
@@ -9,10 +9,10 @@ $c-primary-dark: #1D4ED8;
 $c-primary-light: #3B82F6;
 $c-sky: #0EA5E9;
 
-// AI 标识色
-$c-ai: #7C3AED;
-$c-ai-light: #A78BFA;
-$c-ai-glow: rgba(124, 58, 237, 0.18);
+// AI 标识色 — 水墨风
+$c-ai: #2C2C44;
+$c-ai-light: #5A5A7A;
+$c-ai-glow: rgba(44, 44, 68, 0.12);
 
 // ---------- 中性色 ----------
 $c-bg: #F7F9FC;
@@ -35,7 +35,7 @@ $c-success: #10B981;
 
 // ---------- 渐变 ----------
 $grad-primary: linear-gradient(135deg, #2563EB 0%, #3B82F6 50%, #0EA5E9 100%);
-$grad-ai: linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%);
+$grad-ai: transparent;
 $grad-brand: linear-gradient(135deg, #1E40AF 0%, #2563EB 45%, #0EA5E9 100%);
 $grad-bg: radial-gradient(ellipse at top left, #EFF4FE 0%, #F7F9FC 45%, #F4F7FD 100%);
 
@@ -45,8 +45,8 @@ $shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
 $shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
 $shadow-lg: 0 20px 48px rgba(15, 23, 42, 0.12);
 $shadow-blue: 0 12px 28px rgba(37, 99, 235, 0.28);
-$shadow-ai: 0 8px 24px rgba(124, 58, 237, 0.22);
-$shadow-glow-ai: 0 0 20px rgba(124, 58, 237, 0.3);
+$shadow-ai: 0 2px 8px rgba(15, 23, 42, 0.05);
+$shadow-glow-ai: 0 0 12px rgba(44, 44, 68, 0.15);
 
 // ---------- 圆角 ----------
 $r-sm: 8px;

@@ -71,7 +71,8 @@ function formatTime(time?: string): string {
         :class="{ 'ai-avatar': conv.isAI }"
         :style="!conv.isAI && !isAvatarUrl(conv.avatar) && conv.color ? { background: conv.color } : {}"
       >
-        <img v-if="isAvatarUrl(conv.avatar)" :src="resolveUploadUrl(conv.avatar)" alt="头像" />
+        <InkBallAvatar v-if="conv.isAI" />
+        <img v-else-if="isAvatarUrl(conv.avatar)" :src="resolveUploadUrl(conv.avatar)" alt="头像" />
         <template v-else>{{ conv.avatar || getAvatarText(conv.name) }}</template>
         <span
           v-if="statusDotClass(conv)"
