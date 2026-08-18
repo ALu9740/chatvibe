@@ -54,7 +54,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '总用户数',
       value: failed ? dash : (m ? formatNum(m.totalUsers) : '...'),
       icon: 'User',
-      gradient: '#4F46E5',
+      gradient: '#6495ED',
       link: '/admin/users'
     },
     {
@@ -62,7 +62,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '在线用户',
       value: failed ? dash : (m ? formatNum(m.onlineUsers) : '...'),
       icon: 'Connection',
-      gradient: '#059669',
+      gradient: '#57A773',
       link: '/admin/users'
     },
     {
@@ -70,7 +70,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '今日新增',
       value: failed ? dash : (m ? m.todayNewUsers : '...'),
       icon: 'UserFilled',
-      gradient: '#0284C7',
+      gradient: '#4DB6AC',
       link: '/admin/users'
     },
     {
@@ -78,7 +78,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '今日消息',
       value: failed ? dash : (m ? formatNum(m.todayMessages) : '...'),
       icon: 'ChatDotRound',
-      gradient: '#E11D48',
+      gradient: '#E57373',
       link: '/admin/messages'
     },
     {
@@ -86,7 +86,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '今日AI调用',
       value: failed ? dash : (m ? formatNum(m.todayAiCalls) : '...'),
       icon: 'MagicStick',
-      gradient: '#7C3AED',
+      gradient: '#8C8A9A',
       link: '/admin/ai'
     },
     {
@@ -94,7 +94,7 @@ const metricCards = computed<MetricCard[]>(() => {
       label: '活跃群组',
       value: failed ? dash : (m ? m.activeGroups : '...'),
       icon: 'OfficeBuilding',
-      gradient: '#D97706',
+      gradient: '#FFB74D',
       link: '/admin/groups'
     },
     {
@@ -102,14 +102,14 @@ const metricCards = computed<MetricCard[]>(() => {
       label: 'API可用率',
       value: failed ? dash : (m ? m.apiAvailability.toFixed(1) + '%' : '...'),
       icon: 'CircleCheck',
-      gradient: '#0891B2'
+      gradient: '#4DB6AC'
     },
     {
       key: 'avgResponseTime',
       label: '平均响应',
       value: failed ? dash : (m ? m.avgResponseTime + 'ms' : '...'),
       icon: 'Timer',
-      gradient: '#475569'
+      gradient: '#78909C'
     }
   ]
 })

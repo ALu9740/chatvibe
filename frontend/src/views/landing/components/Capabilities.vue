@@ -143,12 +143,12 @@ onUnmounted(() => observer?.disconnect())
   position: relative;
   overflow: hidden;
 
-  &.icon-blue { background: #2563EB; }
-  &.icon-green { background: #059669; }
-  &.icon-ai { background: var(--grad-ai); }
-  &.icon-amber { background: #D97706; }
-  &.icon-violet { background: #6366F1; }
-  &.icon-cyan { background: #0891B2; }
+  &.icon-blue { background: linear-gradient(135deg, #6BA4F8, #3B82F6); }
+  &.icon-green { background: linear-gradient(135deg, #34D399, #10B981); }
+  &.icon-ai { background: linear-gradient(135deg, #718096, #4A5568); }
+  &.icon-amber { background: linear-gradient(135deg, #FBBF24, #F59E0B); }
+  &.icon-violet { background: linear-gradient(135deg, #D9938A, #B25C52); }
+  &.icon-cyan { background: linear-gradient(135deg, #2DD4BF, #14B8A6); }
 }
 
 .cap-title {
